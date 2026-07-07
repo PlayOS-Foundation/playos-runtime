@@ -26,3 +26,11 @@ endif()
 # playos-run: a small CLI that launches an executable and waits for it.
 add_executable(playos-run src/main.cpp)
 target_link_libraries(playos-run PRIVATE playos-runtime)
+
+# The wlroots/TinyWL compositor is Linux-only (ADR-0002) and off by default so
+# Windows and CI builds of the runtime library are unaffected. Enable with
+# -DPLAYOS_BUILD_COMPOSITOR=ON on a Linux host with wlroots installed.
+option(PLAYOS_BUILD_COMPOSITOR "Build the Linux wlroots compositor" OFF)
+if(PLAYOS_BUILD_COMPOSITOR AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    add_subdirectory(compositor)
+endif()
