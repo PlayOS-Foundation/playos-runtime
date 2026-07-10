@@ -34,6 +34,8 @@
 #include <wlr/types/wlr_seat.h>
 #include <wlr/types/wlr_subcompositor.h>
 #include <wlr/types/wlr_xdg_shell.h>
+#include <wlr/types/wlr_input_device.h>
+#include <wlr/types/wlr_keyboard.h>
 #include <wlr/util/log.h>
 
 struct playos_server {
@@ -51,11 +53,19 @@ struct playos_server {
 
     struct wl_listener new_output;
     struct wl_listener new_xdg_toplevel;
+    struct wl_listener new_input;
 
     int output_width;
     int output_height;
 
     const char *shell_cmd;
+};
+
+struct playos_keyboard {
+    struct wlr_keyboard *wlr_keyboard;
+    struct playos_server *server;
+    struct wl_listener key;
+    struct wl_listener destroy;
 };
 
 struct playos_output {
@@ -84,7 +94,64 @@ static void output_frame(struct wl_listener *listener, void *data) {
     wlr_scene_output_send_frame_done(scene_output, &now);
 }
 
-static void server_new_output(struct wl_listener *listener, void *data) {
+static void keyboard_handle_key(struct wl_listener *listener, void *data) {
+    struct playos_keyboard *kb =
+        wl_container_of(listener, kb, key);
+    struct playos_server *server = kb->server;
+    struct wlr_keyboard_key_event *event = data;
+    struct wlr_seat *seat = server->seat;
+
+    // Forward key events to the seat
+    wlr_seat_set_keyboard(seat, kb->wlr_keyboard);
+    wlr_seat_keyboard_notify_key(seat, event->time_msec,
+                                  event->keycode, event->state);
+}
+
+static void keyboard_handle_destroy(struct wl_listener *listener, void *data) {
+    (void)data;
+    struct playos_keyboard *kb =
+        wl_container_of(listener, kb, destroy);
+    wl_list_remove(&kb->key.link);
+    wl_list_remove(&kb->destroy.link);
+    free(kb);
+}
+
+static void server_new_input(struct wl_listener *listener, void *data) {
+    struct playos_server *server =
+        wl_container_of(listener, server, new_input);
+    struct wlr_input_device *device = data;
+
+    switch (device->type) {
+    case WLR_INPUT_DEVICE_KEYBOARD: {
+        struct playos_keyboard *kb = calloc(1, sizeof(*kb));
+        kb->server = server;
+        kb->wlr_keyboard = wlr_keyboard_from_input_device(device);
+        kb->key.notify = keyboard_handle_key;
+        wl_signal_add(&kb->wlr_keyboard->events.key, &kb->key);
+        kb->destroy.notify = keyboard_handle_destroy;
+        wl_signal_add(&device->events.destroy, &kb->destroy);
+
+        // Set default keymap (US layout)
+        struct xkb_context *xkb_ctx = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
+        struct xkb_keymap *keymap = xkb_keymap_new_from_names(
+            xkb_ctx, NULL, XKB_KEYMAP_COMPILE_NO_FLAGS);
+        wlr_keyboard_set_keymap(kb->wlr_keyboard, keymap);
+        xkb_keymap_unref(keymap);
+        xkb_context_unref(xkb_ctx);
+
+        wlr_seat_set_keyboard(server->seat, kb->wlr_keyboard);
+        wlr_log(WLR_INFO, "keyboard connected");
+        break;
+    }
+    default:
+        break;
+    }
+
+    // Allow the seat to manage capabilities
+    uint32_t caps = 0;
+    caps |= WL_SEAT_CAPABILITY_KEYBOARD;
+    wlr_seat_set_capabilities(server->seat, caps);
+}
     struct playos_server *server = wl_container_of(listener, server, new_output);
     struct wlr_output *wlr_output = data;
 
@@ -153,6 +220,15 @@ static void xdg_surface_first_commit(struct wl_listener *listener, void *data) {
         wlr_xdg_toplevel_set_size(toplevel,
                                   server->output_width, server->output_height);
         wlr_xdg_toplevel_set_maximized(toplevel, true);
+    }
+
+    // Give keyboard focus to the toplevel's surface
+    struct wlr_keyboard *kb = wlr_seat_get_keyboard(server->seat);
+    if (kb) {
+        wlr_seat_keyboard_notify_enter(server->seat,
+                                       toplevel->base->surface,
+                                       kb->keycodes, kb->num_keycodes,
+                                       &kb->modifiers);
     }
 }
 
@@ -231,6 +307,9 @@ int main(int argc, char *argv[]) {
 
     // VERSION-SENSITIVE: wlr_output_layout_create takes the display in 0.19.
     server.output_layout = wlr_output_layout_create(server.display);
+
+    server.new_input.notify = server_new_input;
+    wl_signal_add(&server.backend->events.new_input, &server.new_input);
 
     server.new_output.notify = server_new_output;
     wl_signal_add(&server.backend->events.new_output, &server.new_output);
