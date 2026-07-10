@@ -155,6 +155,8 @@ static void server_new_input(struct wl_listener *listener, void *data) {
     caps |= WL_SEAT_CAPABILITY_KEYBOARD;
     wlr_seat_set_capabilities(server->seat, caps);
 }
+
+static void server_new_output(struct wl_listener *listener, void *data) {
     struct playos_server *server = wl_container_of(listener, server, new_output);
     struct wlr_output *wlr_output = data;
 
