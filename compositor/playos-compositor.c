@@ -209,25 +209,20 @@ static void xdg_surface_first_commit(struct wl_listener *listener, void *data) {
     struct wlr_xdg_toplevel *toplevel = td->toplevel;
     struct wlr_xdg_surface *surface = toplevel->base;
 
-    // Only configure on the initial commit
-    if (!surface->initial_commit) return;
-
-    // Remove listener — we only care about the first commit
-    wl_list_remove(&listener->link);
-    free(td);
-
     if (surface->role != WLR_XDG_SURFACE_ROLE_TOPLEVEL) return;
 
-    wlr_log(WLR_INFO, "initial commit for toplevel, configuring to %dx%d",
-            server->output_width, server->output_height);
-
-    if (server->output_width > 0 && server->output_height > 0) {
+    // Reconfigure on every commit so the shell gets proper size after
+    // returning from a fullscreen sample. Only reconfigure if the size
+    // differs to avoid an infinite configure→commit loop.
+    if (server->output_width > 0 && server->output_height > 0 &&
+        (surface->geometry.width != server->output_width ||
+         surface->geometry.height != server->output_height)) {
         wlr_xdg_toplevel_set_size(toplevel,
                                   server->output_width, server->output_height);
         wlr_xdg_toplevel_set_maximized(toplevel, true);
     }
 
-    // Give keyboard focus to the toplevel's surface
+    // Give keyboard focus
     struct wlr_keyboard *kb = wlr_seat_get_keyboard(server->seat);
     if (kb) {
         wlr_seat_keyboard_notify_enter(server->seat,
