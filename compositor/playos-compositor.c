@@ -68,11 +68,22 @@ static void output_frame(struct wl_listener *listener, void *data) {
     struct wlr_scene_output *scene_output =
         wlr_scene_get_scene_output(scene, output->wlr_output);
 
+    if (scene_output == NULL) {
+        wlr_log(WLR_ERROR, "output_frame: no scene_output for output %s",
+                output->wlr_output->name);
+        return;
+    }
+
     wlr_scene_output_commit(scene_output, NULL);
 
     struct timespec now;
     clock_gettime(CLOCK_MONOTONIC, &now);
     wlr_scene_output_send_frame_done(scene_output, &now);
+
+    static int frame_count = 0;
+    if (++frame_count <= 3 || frame_count % 300 == 0) {
+        wlr_log(WLR_INFO, "rendered frame %d", frame_count);
+    }
 }
 
 static void server_new_output(struct wl_listener *listener, void *data) {
