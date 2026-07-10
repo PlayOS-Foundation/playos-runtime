@@ -123,25 +123,6 @@ static void server_new_output(struct wl_listener *listener, void *data) {
                                        scene_output);
 }
 
-static void xdg_toplevel_map(struct wl_listener *listener, void *data) {
-    (void)data;
-    struct wlr_xdg_surface *surface =
-        wl_container_of(listener, surface, events.map);
-    struct playos_server *server = surface->data;
-
-    wlr_log(WLR_INFO, "xdg surface mapped: role=%d configuring to %dx%d",
-            surface->role,
-            server->output_width, server->output_height);
-
-    if (surface->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL &&
-        server->output_width > 0 && server->output_height > 0) {
-        struct wlr_xdg_toplevel *toplevel = surface->toplevel;
-        wlr_xdg_toplevel_set_size(toplevel,
-                                  server->output_width, server->output_height);
-        wlr_xdg_toplevel_set_maximized(toplevel, true);
-    }
-}
-
 static void server_new_xdg_toplevel(struct wl_listener *listener, void *data) {
     struct playos_server *server =
         wl_container_of(listener, server, new_xdg_toplevel);
@@ -153,13 +134,8 @@ static void server_new_xdg_toplevel(struct wl_listener *listener, void *data) {
 
     struct wlr_scene_tree *tree =
         wlr_scene_xdg_surface_create(&server->scene->tree, toplevel->base);
-    // Store server pointer on the toplevel for the map callback
     toplevel->base->data = server;
-
-    // Configure size when the surface maps (after initialization).
-    struct wl_listener *map_l = calloc(1, sizeof(*map_l));
-    map_l->notify = xdg_toplevel_map;
-    wl_signal_add(&toplevel->base->events.map, map_l);
+    (void)tree;
 }
 
 static void spawn_shell(const char *cmd) {
