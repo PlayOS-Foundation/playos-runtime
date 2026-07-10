@@ -52,6 +52,9 @@ struct playos_server {
     struct wl_listener new_output;
     struct wl_listener new_xdg_toplevel;
 
+    int output_width;
+    int output_height;
+
     const char *shell_cmd;
 };
 
@@ -102,6 +105,10 @@ static void server_new_output(struct wl_listener *listener, void *data) {
     wlr_output_commit_state(wlr_output, &state);
     wlr_output_state_finish(&state);
 
+    // Store output dimensions for toplevel configure
+    server->output_width = wlr_output->width;
+    server->output_height = wlr_output->height;
+
     struct playos_output *output = calloc(1, sizeof(*output));
     output->wlr_output = wlr_output;
     output->server = server;
@@ -116,6 +123,23 @@ static void server_new_output(struct wl_listener *listener, void *data) {
                                        scene_output);
 }
 
+static void xdg_toplevel_map(struct wl_listener *listener, void *data) {
+    (void)data;
+    struct wlr_xdg_toplevel *toplevel =
+        wl_container_of(listener, toplevel, events.map);
+    struct playos_server *server = toplevel->base->data;
+
+    wlr_log(WLR_INFO, "xdg toplevel mapped: title='%s' configuring to %dx%d",
+            toplevel->title ? toplevel->title : "(null)",
+            server->output_width, server->output_height);
+
+    if (server->output_width > 0 && server->output_height > 0) {
+        wlr_xdg_toplevel_set_size(toplevel,
+                                  server->output_width, server->output_height);
+        wlr_xdg_toplevel_set_maximized(toplevel, true);
+    }
+}
+
 static void server_new_xdg_toplevel(struct wl_listener *listener, void *data) {
     struct playos_server *server =
         wl_container_of(listener, server, new_xdg_toplevel);
@@ -127,23 +151,13 @@ static void server_new_xdg_toplevel(struct wl_listener *listener, void *data) {
 
     struct wlr_scene_tree *tree =
         wlr_scene_xdg_surface_create(&server->scene->tree, toplevel->base);
-    toplevel->base->data = tree;
+    // Store server pointer on the toplevel for the map callback
+    toplevel->base->data = server;
 
-    // Configure the toplevel to fill the output(s). Without this the client
-    // stays at 0x0 and renders nothing.
-    if (server->scene) {
-        struct wlr_scene_output *so;
-        wl_list_for_each(so, &server->scene->outputs, link) {
-            struct wlr_output *o = so->output;
-            if (o && o->enabled && o->width > 0 && o->height > 0) {
-                wlr_xdg_toplevel_set_size(toplevel, o->width, o->height);
-                wlr_xdg_toplevel_set_maximized(toplevel, true);
-                wlr_log(WLR_INFO, "configured toplevel to %dx%d (maximized)",
-                        o->width, o->height);
-                break;
-            }
-        }
-    }
+    // Configure size when the surface maps (after initialization).
+    struct wl_listener *map_l = calloc(1, sizeof(*map_l));
+    map_l->notify = xdg_toplevel_map;
+    wl_signal_add(&toplevel->events.map, map_l);
 }
 
 static void spawn_shell(const char *cmd) {
