@@ -121,14 +121,24 @@ static void server_new_xdg_toplevel(struct wl_listener *listener, void *data) {
         wl_container_of(listener, server, new_xdg_toplevel);
     struct wlr_xdg_toplevel *toplevel = data;
 
-    wlr_log(WLR_INFO, "new xdg toplevel: title='%s' app_id='%s' size=%dx%d",
+    wlr_log(WLR_INFO, "new xdg toplevel: title='%s' app_id='%s'",
             toplevel->title ? toplevel->title : "(null)",
-            toplevel->app_id ? toplevel->app_id : "(null)",
-            toplevel->current.width, toplevel->current.height);
+            toplevel->app_id ? toplevel->app_id : "(null)");
 
     struct wlr_scene_tree *tree =
         wlr_scene_xdg_surface_create(&server->scene->tree, toplevel->base);
     toplevel->base->data = tree;
+
+    // Configure the toplevel to fill the output(s). Without this the client
+    // stays at 0x0 and renders nothing.
+    struct wlr_output *output;
+    wl_list_for_each(output, &server->backend->outputs, link) {
+        if (output->enabled) {
+            wlr_xdg_toplevel_set_size(toplevel, output->width, output->height);
+            wlr_xdg_toplevel_set_maximized(toplevel, true);
+            break;
+        }
+    }
 }
 
 static void spawn_shell(const char *cmd) {
