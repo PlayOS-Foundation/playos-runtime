@@ -9,19 +9,23 @@ Runtime Architecture). Platform behavior is specified there first.
 
 ## Status
 
-Early scaffold. Currently provides the **package-execution** primitive needed
-by the vertical slice: launch an executable and wait for it to exit.
+**v0.1 — Vertical Slice POC complete.**
 
 - **`playos-runtime`** (library) — `PlayOS::Runtime::LaunchAndWait(...)`,
   launching a child in its own process group (CreateProcess on Windows,
   fork/exec on POSIX).
 - **`playos-run`** (CLI) — `playos-run <executable> [args...]` launches and
-  waits, returning the child's exit code. The shell uses the same library to
-  launch games and detect their exit (the "return to shell" loop).
+  waits, returning the child's exit code.
+- **`playos-compositor`** — wlroots 0.19/TinyWL-derived Wayland compositor.
+  DRM/KMS display bring-up, EGL/GLES2 rendering, keyboard input routing,
+  XDG toplevel configure. Built with `-DPLAYOS_BUILD_COMPOSITOR=ON` (Linux only).
 
-> The Linux compositor (wlroots/TinyWL, per ADR-0002) will also live in this
-> repository as it is brought up on hardware. It is Linux-only and is not part
-> of the Windows-first scaffold.
+### Known limitations (v0.1)
+
+- **VMware**: requires `WLR_RENDERER=pixman` (vmwgfx dmabuf bug).
+- **No pointer/touch input** — keyboard-only for now.
+- **No audio** — compositor does not wire PipeWire yet.
+- See `compositor/BRINGUP.md` for detailed build & run instructions.
 
 ## Layout
 

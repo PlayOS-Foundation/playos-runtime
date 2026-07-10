@@ -89,11 +89,19 @@ glxinfo | grep renderer     # expect: AMD Radeon 780M (not llvmpipe)
 ## Stage 1 definition of done
 
 ```text
-[ ] wlroots detected and compositor builds
-[ ] compositor takes the display on the Ally (or nests for dev)
-[ ] Raylib shell appears as a Wayland client
-[ ] gamepad navigates the shell (evdev backend)
-[ ] selecting the sample launches it and returns to the shell
+[x] wlroots detected and compositor builds
+[x] compositor takes the display on the Ally (or nests for dev)
+[x] Raylib shell appears as a Wayland client
+[x] keyboard navigates the shell (arrows/Enter/Esc)
+[x] selecting a sample launches it and returns to the shell
+[ ] gamepad navigates the shell (evdev backend) — pending ROG Ally test
+```
+
+### VMware notes
+
+The VMware `vmwgfx` driver has broken dmabuf support. Work around it:
+```sh
+WLR_RENDERER=pixman ./build/compositor/playos-compositor ...
 ```
 
 ## Known TODOs (next stages)
