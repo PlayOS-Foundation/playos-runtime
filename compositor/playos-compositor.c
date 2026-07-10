@@ -150,10 +150,23 @@ int main(int argc, char *argv[]) {
     }
 
     server.renderer = wlr_renderer_autocreate(server.backend);
+    if (server.renderer == NULL) {
+        wlr_log(WLR_ERROR, "failed to create wlr_renderer");
+        wlr_backend_destroy(server.backend);
+        wl_display_destroy(server.display);
+        return 1;
+    }
     wlr_renderer_init_wl_display(server.renderer, server.display);
 
     server.allocator =
         wlr_allocator_autocreate(server.backend, server.renderer);
+    if (server.allocator == NULL) {
+        wlr_log(WLR_ERROR, "failed to create wlr_allocator");
+        wlr_renderer_destroy(server.renderer);
+        wlr_backend_destroy(server.backend);
+        wl_display_destroy(server.display);
+        return 1;
+    }
 
     wlr_compositor_create(server.display, 5, server.renderer);
     wlr_subcompositor_create(server.display);
