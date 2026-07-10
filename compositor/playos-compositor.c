@@ -74,6 +74,9 @@ struct playos_output {
     struct wl_listener frame;
 };
 
+// Forward declarations
+static void server_new_input(struct wl_listener *listener, void *data);
+
 static void output_frame(struct wl_listener *listener, void *data) {
     (void)data;
     struct playos_output *output = wl_container_of(listener, output, frame);
