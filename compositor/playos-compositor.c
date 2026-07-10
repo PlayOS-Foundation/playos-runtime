@@ -131,12 +131,17 @@ static void server_new_xdg_toplevel(struct wl_listener *listener, void *data) {
 
     // Configure the toplevel to fill the output(s). Without this the client
     // stays at 0x0 and renders nothing.
-    struct wlr_output *output;
-    wl_list_for_each(output, &server->backend->outputs, link) {
-        if (output->enabled) {
-            wlr_xdg_toplevel_set_size(toplevel, output->width, output->height);
-            wlr_xdg_toplevel_set_maximized(toplevel, true);
-            break;
+    if (server->scene) {
+        struct wlr_scene_output *so;
+        wl_list_for_each(so, &server->scene->outputs, link) {
+            struct wlr_output *o = so->output;
+            if (o && o->enabled && o->width > 0 && o->height > 0) {
+                wlr_xdg_toplevel_set_size(toplevel, o->width, o->height);
+                wlr_xdg_toplevel_set_maximized(toplevel, true);
+                wlr_log(WLR_INFO, "configured toplevel to %dx%d (maximized)",
+                        o->width, o->height);
+                break;
+            }
         }
     }
 }
