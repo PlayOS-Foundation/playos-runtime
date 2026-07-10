@@ -197,9 +197,19 @@ static void server_new_output(struct wl_listener *listener, void *data) {
 
 struct toplevel_commit_data {
     struct wl_listener listener;
+    struct wl_listener destroy;
     struct playos_server *server;
     struct wlr_xdg_toplevel *toplevel;
 };
+
+static void toplevel_destroy(struct wl_listener *listener, void *data) {
+    (void)data;
+    struct toplevel_commit_data *td =
+        wl_container_of(listener, td, destroy);
+    wl_list_remove(&td->listener.link);
+    wl_list_remove(&td->destroy.link);
+    free(td);
+}
 
 static void xdg_surface_first_commit(struct wl_listener *listener, void *data) {
     (void)data;
@@ -252,6 +262,10 @@ static void server_new_xdg_toplevel(struct wl_listener *listener, void *data) {
     td->toplevel = toplevel;
     td->listener.notify = xdg_surface_first_commit;
     wl_signal_add(&toplevel->base->surface->events.commit, &td->listener);
+
+    // Clean up the commit listener when the toplevel is destroyed
+    td->destroy.notify = toplevel_destroy;
+    wl_signal_add(&toplevel->events.destroy, &td->destroy);
 }
 
 static void spawn_shell(const char *cmd) {
