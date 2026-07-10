@@ -85,6 +85,10 @@ static void server_new_output(struct wl_listener *listener, void *data) {
     struct playos_server *server = wl_container_of(listener, server, new_output);
     struct wlr_output *wlr_output = data;
 
+    wlr_log(WLR_INFO, "new output: %s %s", wlr_output->name,
+            wlr_output->make ? wlr_output->make : "",
+            wlr_output->model ? wlr_output->model : "");
+
     wlr_output_init_render(wlr_output, server->allocator, server->renderer);
 
     // VERSION-SENSITIVE: wlr_output_state API (wlroots 0.18+).
@@ -115,14 +119,13 @@ static void server_new_output(struct wl_listener *listener, void *data) {
 static void server_new_xdg_toplevel(struct wl_listener *listener, void *data) {
     struct playos_server *server =
         wl_container_of(listener, server, new_xdg_toplevel);
-    // VERSION-SENSITIVE: wlroots 0.19 emits new_toplevel with a
-    // wlr_xdg_toplevel; older versions used new_surface with a
-    // wlr_xdg_surface.
     struct wlr_xdg_toplevel *toplevel = data;
 
-    // Add the toplevel to the scene graph so it is composited. The console
-    // model is one fullscreen surface at a time; layout/fullscreen policy is
-    // a TODO for Stage 2.
+    wlr_log(WLR_INFO, "new xdg toplevel: title='%s' app_id='%s' size=%dx%d",
+            toplevel->title ? toplevel->title : "(null)",
+            toplevel->app_id ? toplevel->app_id : "(null)",
+            toplevel->current.width, toplevel->current.height);
+
     struct wlr_scene_tree *tree =
         wlr_scene_xdg_surface_create(&server->scene->tree, toplevel->base);
     toplevel->base->data = tree;
@@ -130,6 +133,7 @@ static void server_new_xdg_toplevel(struct wl_listener *listener, void *data) {
 
 static void spawn_shell(const char *cmd) {
     if (cmd == NULL) return;
+    wlr_log(WLR_INFO, "spawning shell: %s", cmd);
     if (fork() == 0) {
         setsid();
         execl("/bin/sh", "/bin/sh", "-c", cmd, (void *)NULL);
