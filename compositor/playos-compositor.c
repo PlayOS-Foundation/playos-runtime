@@ -123,6 +123,31 @@ static void server_new_output(struct wl_listener *listener, void *data) {
                                        scene_output);
 }
 
+static void xdg_surface_first_commit(struct wl_listener *listener, void *data) {
+    (void)data;
+    struct wlr_xdg_surface *surface =
+        wl_container_of(listener, surface, surface->events.commit);
+    struct playos_server *server = surface->data;
+
+    // Only configure on the initial commit
+    if (!surface->initial_commit) return;
+
+    // Remove listener — we only care about the first commit
+    wl_list_remove(&listener->link);
+    free(listener);
+
+    if (surface->role != WLR_XDG_SURFACE_ROLE_TOPLEVEL) return;
+
+    wlr_log(WLR_INFO, "initial commit for toplevel, configuring to %dx%d",
+            server->output_width, server->output_height);
+
+    if (server->output_width > 0 && server->output_height > 0) {
+        wlr_xdg_toplevel_set_size(surface->toplevel,
+                                  server->output_width, server->output_height);
+        wlr_xdg_toplevel_set_maximized(surface->toplevel, true);
+    }
+}
+
 static void server_new_xdg_toplevel(struct wl_listener *listener, void *data) {
     struct playos_server *server =
         wl_container_of(listener, server, new_xdg_toplevel);
@@ -136,6 +161,13 @@ static void server_new_xdg_toplevel(struct wl_listener *listener, void *data) {
         wlr_scene_xdg_surface_create(&server->scene->tree, toplevel->base);
     toplevel->base->data = server;
     (void)tree;
+
+    // Wait for the initial surface commit before configuring.
+    // wlroots 0.19 requires the surface to be initialized before
+    // wlr_xdg_toplevel_set_size can be called.
+    struct wl_listener *commit_l = calloc(1, sizeof(*commit_l));
+    commit_l->notify = xdg_surface_first_commit;
+    wl_signal_add(&toplevel->base->surface->events.commit, commit_l);
 }
 
 static void spawn_shell(const char *cmd) {
