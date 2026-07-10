@@ -79,11 +79,6 @@ static void output_frame(struct wl_listener *listener, void *data) {
     struct timespec now;
     clock_gettime(CLOCK_MONOTONIC, &now);
     wlr_scene_output_send_frame_done(scene_output, &now);
-
-    static int frame_count = 0;
-    if (++frame_count <= 3 || frame_count % 300 == 0) {
-        wlr_log(WLR_INFO, "rendered frame %d", frame_count);
-    }
 }
 
 static void server_new_output(struct wl_listener *listener, void *data) {
