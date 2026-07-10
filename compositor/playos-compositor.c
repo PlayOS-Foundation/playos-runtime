@@ -123,18 +123,26 @@ static void server_new_output(struct wl_listener *listener, void *data) {
                                        scene_output);
 }
 
+struct toplevel_commit_data {
+    struct wl_listener listener;
+    struct playos_server *server;
+    struct wlr_xdg_toplevel *toplevel;
+};
+
 static void xdg_surface_first_commit(struct wl_listener *listener, void *data) {
     (void)data;
-    struct wlr_xdg_surface *surface =
-        wl_container_of(listener, surface, surface->events.commit);
-    struct playos_server *server = surface->data;
+    struct toplevel_commit_data *td =
+        wl_container_of(listener, td, listener);
+    struct playos_server *server = td->server;
+    struct wlr_xdg_toplevel *toplevel = td->toplevel;
+    struct wlr_xdg_surface *surface = toplevel->base;
 
     // Only configure on the initial commit
     if (!surface->initial_commit) return;
 
     // Remove listener — we only care about the first commit
     wl_list_remove(&listener->link);
-    free(listener);
+    free(td);
 
     if (surface->role != WLR_XDG_SURFACE_ROLE_TOPLEVEL) return;
 
@@ -142,9 +150,9 @@ static void xdg_surface_first_commit(struct wl_listener *listener, void *data) {
             server->output_width, server->output_height);
 
     if (server->output_width > 0 && server->output_height > 0) {
-        wlr_xdg_toplevel_set_size(surface->toplevel,
+        wlr_xdg_toplevel_set_size(toplevel,
                                   server->output_width, server->output_height);
-        wlr_xdg_toplevel_set_maximized(surface->toplevel, true);
+        wlr_xdg_toplevel_set_maximized(toplevel, true);
     }
 }
 
@@ -163,11 +171,11 @@ static void server_new_xdg_toplevel(struct wl_listener *listener, void *data) {
     (void)tree;
 
     // Wait for the initial surface commit before configuring.
-    // wlroots 0.19 requires the surface to be initialized before
-    // wlr_xdg_toplevel_set_size can be called.
-    struct wl_listener *commit_l = calloc(1, sizeof(*commit_l));
-    commit_l->notify = xdg_surface_first_commit;
-    wl_signal_add(&toplevel->base->surface->events.commit, commit_l);
+    struct toplevel_commit_data *td = calloc(1, sizeof(*td));
+    td->server = server;
+    td->toplevel = toplevel;
+    td->listener.notify = xdg_surface_first_commit;
+    wl_signal_add(&toplevel->base->surface->events.commit, &td->listener);
 }
 
 static void spawn_shell(const char *cmd) {
