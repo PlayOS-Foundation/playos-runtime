@@ -65,6 +65,7 @@ struct playos_keyboard {
     struct wlr_keyboard *wlr_keyboard;
     struct playos_server *server;
     struct wl_listener key;
+    struct wl_listener modifiers;
     struct wl_listener destroy;
 };
 
@@ -97,6 +98,15 @@ static void output_frame(struct wl_listener *listener, void *data) {
     wlr_scene_output_send_frame_done(scene_output, &now);
 }
 
+static void keyboard_handle_modifiers(struct wl_listener *listener, void *data) {
+    (void)data;
+    struct playos_keyboard *kb =
+        wl_container_of(listener, kb, modifiers);
+    wlr_seat_set_keyboard(kb->server->seat, kb->wlr_keyboard);
+    wlr_seat_keyboard_notify_modifiers(kb->server->seat,
+        &kb->wlr_keyboard->modifiers);
+}
+
 static void keyboard_handle_key(struct wl_listener *listener, void *data) {
     struct playos_keyboard *kb =
         wl_container_of(listener, kb, key);
@@ -115,6 +125,7 @@ static void keyboard_handle_destroy(struct wl_listener *listener, void *data) {
     struct playos_keyboard *kb =
         wl_container_of(listener, kb, destroy);
     wl_list_remove(&kb->key.link);
+    wl_list_remove(&kb->modifiers.link);
     wl_list_remove(&kb->destroy.link);
     free(kb);
 }
@@ -131,6 +142,8 @@ static void server_new_input(struct wl_listener *listener, void *data) {
         kb->wlr_keyboard = wlr_keyboard_from_input_device(device);
         kb->key.notify = keyboard_handle_key;
         wl_signal_add(&kb->wlr_keyboard->events.key, &kb->key);
+        kb->modifiers.notify = keyboard_handle_modifiers;
+        wl_signal_add(&kb->wlr_keyboard->events.modifiers, &kb->modifiers);
         kb->destroy.notify = keyboard_handle_destroy;
         wl_signal_add(&device->events.destroy, &kb->destroy);
 
