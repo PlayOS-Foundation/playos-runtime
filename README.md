@@ -9,7 +9,7 @@ Runtime Architecture). Platform behavior is specified there first.
 
 ## Status
 
-**v0.1 — Vertical Slice POC complete.**
+**v0.2 — ROG Ally confirmed working.**
 
 - **`playos-runtime`** (library) — `PlayOS::Runtime::LaunchAndWait(...)`,
   launching a child in its own process group (CreateProcess on Windows,
@@ -20,11 +20,11 @@ Runtime Architecture). Platform behavior is specified there first.
   DRM/KMS display bring-up, EGL/GLES2 rendering, keyboard input routing,
   XDG toplevel configure. Built with `-DPLAYOS_BUILD_COMPOSITOR=ON` (Linux only).
 
-### Known limitations (v0.1)
+### Known limitations (v0.2)
 
-- **VMware**: requires `WLR_RENDERER=pixman` (vmwgfx dmabuf bug).
 - **No pointer/touch input** — keyboard-only for now.
 - **No audio** — compositor does not wire PipeWire yet.
+- **No suspend/resume** — deferred to Stage 2.
 - See `compositor/BRINGUP.md` for detailed build & run instructions.
 
 ## Layout
