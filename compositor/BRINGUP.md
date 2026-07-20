@@ -5,10 +5,14 @@ Raylib shell as a Wayland client. Controller input reaches the shell through
 the PlayOS Platform API's evdev backend, so full Wayland input routing is not
 required for this stage.
 
-> This compositor is a **skeleton derived from upstream TinyWL** and targets
-> **wlroots 0.19**. If your installed wlroots differs, adapt the calls flagged
-> `VERSION-SENSITIVE` in `playos-compositor.c`, using the matching upstream
-> `tinywl.c` as a reference.
+> **Status:** The original TinyWL-derived C skeleton has been **replaced**
+> with a C++17 RAII compositor per ADR-0002. The C file (`playos-compositor.c`)
+> is kept for reference only — the active source is `src/main.cpp` and
+> `src/compositor.cpp` with the header at `include/playos/compositor/compositor.hpp`.
+>
+> This compositor targets **wlroots 0.19**. If your installed wlroots differs,
+> adapt the calls flagged `VERSION-SENSITIVE` in `src/compositor.cpp`, using
+> the matching upstream `tinywl.c` as a reference.
 
 ## 1. Packages (Arch / CachyOS)
 

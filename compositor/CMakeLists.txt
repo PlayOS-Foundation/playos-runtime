@@ -1,7 +1,8 @@
-# PlayOS Compositor (Linux only) — Stage 1 skeleton.
+# PlayOS Compositor (Linux only) — C++ RAII compositor on wlroots.
 #
-# Built only when PLAYOS_BUILD_COMPOSITOR=ON and on Linux. Requires wlroots,
-# wayland-server, and xkbcommon via pkg-config. See BRINGUP.md for packages.
+# Requires C++17, wlroots, wayland-server, and xkbcommon.
+# Built only when PLAYOS_BUILD_COMPOSITOR=ON and on Linux.
+# See BRINGUP.md for required packages.
 
 find_package(PkgConfig REQUIRED)
 find_program(WAYLAND_SCANNER wayland-scanner REQUIRED)
@@ -50,12 +51,17 @@ add_custom_command(
     COMMENT "Generating xdg-shell protocol from ${XDG_SHELL_XML}"
 )
 
-add_executable(playos-compositor playos-compositor.c
-    "${XDG_SHELL_PROTO_C}")
+add_executable(playos-compositor
+    src/main.cpp
+    src/compositor.cpp
+    "${XDG_SHELL_PROTO_C}"
+)
 
+target_compile_features(playos-compositor PRIVATE cxx_std_17)
 target_compile_definitions(playos-compositor PRIVATE WLR_USE_UNSTABLE)
 
 target_include_directories(playos-compositor PRIVATE
+    include
     ${CMAKE_CURRENT_BINARY_DIR}
     ${WLROOTS_INCLUDE_DIRS}
     ${WAYLAND_SERVER_INCLUDE_DIRS}
