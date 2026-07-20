@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<protocol name="playos_game_v1">
+  <copyright>
+    Copyright (c) 2026 PlayOS Foundation
+
+    Permission is hereby granted, free of charge, to any person obtaining a
+    copy of this software and associated documentation files (the "Software"),
+    to deal in the Software without restriction, including without limitation
+    the rights to use, copy, modify, merge, publish, distribute, sublicense,
+    and/or sell copies of the Software, and to permit persons to whom the
+    Software is furnished to do so, subject to the following conditions:
+
+    The above copyright notice and this permission notice shall be included
+    in all copies or substantial portions of the Software.
+  </copyright>
+
+  <description summary="PlayOS game surface role">
+    A global interface that a PlayOS game client binds to in order to
+    declare its surface as the active game surface.
+
+    The compositor uses this role to:
+    - present the game in the foreground, above the shell,
+    - route gameplay input to the game,
+    - target the game when the Home button is pressed,
+    - track game lifecycle for crash recovery.
+
+    A client that does not bind this protocol will not receive gameplay
+    focus. Only one game surface may be active at a time; binding a new
+    surface replaces the previous game.
+  </description>
+
+  <interface name="playos_game_v1" version="1">
+    <description summary="PlayOS game surface role">
+      A global interface for declaring a surface as the active game.
+      The client binds to this global and calls set_game_surface to
+      associate one of its wl_surfaces with the game role.
+    </description>
+
+    <request name="set_game_surface">
+      <description summary="declare a surface as the active game">
+        Associate the given wl_surface with the game role. The surface
+        must already have (or will be given) the xdg_toplevel role.
+
+        If a game surface was previously declared, the old association
+        is replaced and the previous game toplevel is closed.
+
+        A client may call this request only once per playos_game_v1
+        object. Calling it more than once is a protocol error.
+      </description>
+      <arg name="surface" type="object" interface="wl_surface"
+           summary="the surface to assign the game role to"/>
+    </request>
+  </interface>
+</protocol>

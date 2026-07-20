@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<protocol name="playos_shell_v1">
+  <copyright>
+    Copyright (c) 2026 PlayOS Foundation
+
+    Permission is hereby granted, free of charge, to any person obtaining a
+    copy of this software and associated documentation files (the "Software"),
+    to deal in the Software without restriction, including without limitation
+    the rights to use, copy, modify, merge, publish, distribute, sublicense,
+    and/or sell copies of the Software, and to permit persons to whom the
+    Software is furnished to do so, subject to the following conditions:
+
+    The above copyright notice and this permission notice shall be included
+    in all copies or substantial portions of the Software.
+  </copyright>
+
+  <description summary="PlayOS shell surface role">
+    A global interface that a PlayOS shell client binds to in order to
+    declare its surface as the shell surface.
+
+    The compositor uses this role to:
+    - keep the shell alive as the background client,
+    - restore the shell to the foreground when a game exits,
+    - route Home-button events to terminate the active game,
+    - maintain shell focus when no game is active.
+
+    A client that does not bind this protocol will not be treated as the
+    shell. Only one shell surface may be active at a time; binding a
+    new surface replaces the previous shell.
+  </description>
+
+  <interface name="playos_shell_v1" version="1">
+    <description summary="PlayOS shell surface role">
+      A global interface for declaring a surface as the PlayOS Shell.
+      The client binds to this global and calls set_shell_surface to
+      associate one of its wl_surfaces with the shell role.
+    </description>
+
+    <request name="set_shell_surface">
+      <description summary="declare a surface as the shell">
+        Associate the given wl_surface with the shell role. The surface
+        must already have (or will be given) the xdg_toplevel role.
+
+        If a shell surface was previously declared, the old association
+        is replaced and the previous shell toplevel is closed.
+
+        A client may call this request only once per playos_shell_v1
+        object. Calling it more than once is a protocol error.
+      </description>
+      <arg name="surface" type="object" interface="wl_surface"
+           summary="the surface to assign the shell role to"/>
+    </request>
+  </interface>
+</protocol>

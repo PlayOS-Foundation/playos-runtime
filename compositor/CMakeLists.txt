@@ -51,10 +51,40 @@ add_custom_command(
     COMMENT "Generating xdg-shell protocol from ${XDG_SHELL_XML}"
 )
 
+# ── PlayOS custom protocols ──────────────────────────────────────────
+
+set(PLAYOS_SHELL_XML  "${CMAKE_CURRENT_SOURCE_DIR}/protocol/playos-shell-v1.xml")
+set(PLAYOS_GAME_XML   "${CMAKE_CURRENT_SOURCE_DIR}/protocol/playos-game-v1.xml")
+
+set(PLAYOS_SHELL_PROTO_H "${CMAKE_CURRENT_BINARY_DIR}/playos-shell-v1-protocol.h")
+set(PLAYOS_SHELL_PROTO_C "${CMAKE_CURRENT_BINARY_DIR}/playos-shell-v1-protocol.c")
+set(PLAYOS_GAME_PROTO_H  "${CMAKE_CURRENT_BINARY_DIR}/playos-game-v1-protocol.h")
+set(PLAYOS_GAME_PROTO_C  "${CMAKE_CURRENT_BINARY_DIR}/playos-game-v1-protocol.c")
+
+add_custom_command(
+    OUTPUT "${PLAYOS_SHELL_PROTO_H}" "${PLAYOS_SHELL_PROTO_C}"
+    COMMAND ${WAYLAND_SCANNER} server-header "${PLAYOS_SHELL_XML}" "${PLAYOS_SHELL_PROTO_H}"
+    COMMAND ${WAYLAND_SCANNER} private-code "${PLAYOS_SHELL_XML}" "${PLAYOS_SHELL_PROTO_C}"
+    DEPENDS "${PLAYOS_SHELL_XML}"
+    COMMENT "Generating playos_shell_v1 protocol"
+)
+
+add_custom_command(
+    OUTPUT "${PLAYOS_GAME_PROTO_H}" "${PLAYOS_GAME_PROTO_C}"
+    COMMAND ${WAYLAND_SCANNER} server-header "${PLAYOS_GAME_XML}" "${PLAYOS_GAME_PROTO_H}"
+    COMMAND ${WAYLAND_SCANNER} private-code "${PLAYOS_GAME_XML}" "${PLAYOS_GAME_PROTO_C}"
+    DEPENDS "${PLAYOS_GAME_XML}"
+    COMMENT "Generating playos_game_v1 protocol"
+)
+
+# ── Executable ───────────────────────────────────────────────────────
+
 add_executable(playos-compositor
     src/main.cpp
     src/compositor.cpp
     "${XDG_SHELL_PROTO_C}"
+    "${PLAYOS_SHELL_PROTO_C}"
+    "${PLAYOS_GAME_PROTO_C}"
 )
 
 target_compile_features(playos-compositor PRIVATE cxx_std_17)

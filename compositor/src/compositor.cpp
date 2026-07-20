@@ -23,7 +23,133 @@ extern "C" {
 #include <sys/wait.h>
 #include <unistd.h>
 
+// Generated protocol headers (produced by wayland-scanner from XML).
+extern "C" {
+#include "playos-shell-v1-protocol.h"
+#include "playos-game-v1-protocol.h"
+}
+
 namespace PlayOS {
+
+// ══════════════════════════════════════════════════════════════════════
+//  Custom protocol resource types
+// ══════════════════════════════════════════════════════════════════════
+
+struct PlayosShellResource {
+    wl_resource* resource;
+    Compositor*  compositor;
+    wlr_surface* surface = nullptr;  // set by set_shell_surface
+};
+
+struct PlayosGameResource {
+    wl_resource* resource;
+    Compositor*  compositor;
+    wlr_surface* surface = nullptr;  // set by set_game_surface
+};
+
+// ── playos_shell_v1 implementation ───────────────────────────────────
+
+static void shell_resource_destroy(wl_resource* resource) {
+    auto* r = static_cast<PlayosShellResource*>(wl_resource_get_user_data(resource));
+    delete r;
+}
+
+void Compositor::shell_set_shell_surface(wl_client* /*client*/,
+                                          wl_resource* resource,
+                                          wl_resource* surface_resource) {
+    auto* r = static_cast<PlayosShellResource*>(wl_resource_get_user_data(resource));
+    Compositor* self = r->compositor;
+
+    wlr_surface* surface = wlr_surface_from_resource(surface_resource);
+    r->surface = surface;
+
+    wlr_xdg_surface* xdg =
+        wlr_xdg_surface_try_from_wlr_surface(surface);
+    if (xdg && xdg->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL) {
+        if (self->shell_toplevel_ && self->shell_toplevel_ != xdg->toplevel) {
+            wlr_xdg_toplevel_send_close(self->shell_toplevel_);
+        }
+        self->shell_toplevel_ = xdg->toplevel;
+        self->pending_shell_surface_ = nullptr;
+        wlr_log(WLR_INFO, "shell surface role assigned (immediate)");
+    } else {
+        self->pending_shell_surface_ = surface;
+        wlr_log(WLR_INFO, "shell surface role pending (xdg_toplevel not yet created)");
+    }
+}
+
+static const struct playos_shell_v1_interface shell_impl = {
+    .set_shell_surface = Compositor::shell_set_shell_surface,
+};
+
+void Compositor::shell_bind(wl_client* client, void* data,
+                             uint32_t version, uint32_t id) {
+    auto* self = static_cast<Compositor*>(data);
+    auto* r = new PlayosShellResource{};
+    r->compositor = self;
+    r->resource = wl_resource_create(
+        client, &playos_shell_v1_interface, version, id);
+    if (!r->resource) {
+        delete r;
+        wl_client_post_no_memory(client);
+        return;
+    }
+    wl_resource_set_implementation(
+        r->resource, &shell_impl, r, shell_resource_destroy);
+    wlr_log(WLR_INFO, "playos_shell_v1 bound");
+}
+
+// ── playos_game_v1 implementation ────────────────────────────────────
+
+static void game_resource_destroy(wl_resource* resource) {
+    auto* r = static_cast<PlayosGameResource*>(wl_resource_get_user_data(resource));
+    delete r;
+}
+
+void Compositor::game_set_game_surface(wl_client* /*client*/,
+                                        wl_resource* resource,
+                                        wl_resource* surface_resource) {
+    auto* r = static_cast<PlayosGameResource*>(wl_resource_get_user_data(resource));
+    Compositor* self = r->compositor;
+
+    wlr_surface* surface = wlr_surface_from_resource(surface_resource);
+    r->surface = surface;
+
+    wlr_xdg_surface* xdg =
+        wlr_xdg_surface_try_from_wlr_surface(surface);
+    if (xdg && xdg->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL) {
+        if (self->game_toplevel_ && self->game_toplevel_ != xdg->toplevel) {
+            wlr_xdg_toplevel_send_close(self->game_toplevel_);
+        }
+        self->game_toplevel_ = xdg->toplevel;
+        self->pending_game_surface_ = nullptr;
+        wlr_log(WLR_INFO, "game surface role assigned (immediate)");
+    } else {
+        self->pending_game_surface_ = surface;
+        wlr_log(WLR_INFO, "game surface role pending (xdg_toplevel not yet created)");
+    }
+}
+
+static const struct playos_game_v1_interface game_impl = {
+    .set_game_surface = Compositor::game_set_game_surface,
+};
+
+void Compositor::game_bind(wl_client* client, void* data,
+                            uint32_t version, uint32_t id) {
+    auto* self = static_cast<Compositor*>(data);
+    auto* r = new PlayosGameResource{};
+    r->compositor = self;
+    r->resource = wl_resource_create(
+        client, &playos_game_v1_interface, version, id);
+    if (!r->resource) {
+        delete r;
+        wl_client_post_no_memory(client);
+        return;
+    }
+    wl_resource_set_implementation(
+        r->resource, &game_impl, r, game_resource_destroy);
+    wlr_log(WLR_INFO, "playos_game_v1 bound");
+}
 
 // ══════════════════════════════════════════════════════════════════════
 //  Construction / Destruction
@@ -121,6 +247,20 @@ void Compositor::setup_protocols() {
     xdg_shell_ = wlr_xdg_shell_create(display_, 3);
     new_xdg_toplevel_.notify = handle_new_xdg_toplevel;
     wl_signal_add(&xdg_shell_->events.new_toplevel, &new_xdg_toplevel_);
+
+    setup_custom_protocols();
+}
+
+void Compositor::setup_custom_protocols() {
+    // ── playos_shell_v1 ──────────────────────────────────────────
+    playos_shell_global_ = wl_global_create(
+        display_, &playos_shell_v1_interface, 1, this, shell_bind);
+
+    // ── playos_game_v1 ───────────────────────────────────────────
+    playos_game_global_ = wl_global_create(
+        display_, &playos_game_v1_interface, 1, this, game_bind);
+
+    wlr_log(WLR_INFO, "custom protocols registered: playos_shell_v1, playos_game_v1");
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -353,17 +493,32 @@ void Compositor::handle_keyboard_destroy(wl_listener* listener,
 void Compositor::handle_new_xdg_toplevel(wl_listener* listener, void* data) {
     Compositor* self = wl_container_of(listener, self, new_xdg_toplevel_);
     wlr_xdg_toplevel* toplevel = static_cast<wlr_xdg_toplevel*>(data);
+    wlr_surface* surface = toplevel->base->surface;
 
     wlr_log(WLR_INFO, "new xdg toplevel: title='%s' app_id='%s'",
             toplevel->title ? toplevel->title : "(null)",
             toplevel->app_id ? toplevel->app_id : "(null)");
 
-    // The first client is the shell; subsequent clients are games.
-    // Stage 2+: replace with explicit surface roles (playos_shell_v1, etc.).
-    if (!self->shell_toplevel_) {
+    // Resolve pending surface role assignments from custom protocols.
+    // A client may call set_shell_surface / set_game_surface before its
+    // xdg_toplevel exists; we catch the match here.
+    if (self->pending_shell_surface_ == surface) {
+        if (self->shell_toplevel_ && self->shell_toplevel_ != toplevel) {
+            wlr_xdg_toplevel_send_close(self->shell_toplevel_);
+        }
         self->shell_toplevel_ = toplevel;
-    } else {
+        self->pending_shell_surface_ = nullptr;
+        wlr_log(WLR_INFO, "shell surface role resolved (pending → toplevel)");
+    } else if (self->pending_game_surface_ == surface) {
+        if (self->game_toplevel_ && self->game_toplevel_ != toplevel) {
+            wlr_xdg_toplevel_send_close(self->game_toplevel_);
+        }
         self->game_toplevel_ = toplevel;
+        self->pending_game_surface_ = nullptr;
+        wlr_log(WLR_INFO, "game surface role resolved (pending → toplevel)");
+    } else {
+        wlr_log(WLR_INFO, "xdg toplevel without explicit role — "
+                "client must bind playos_shell_v1 or playos_game_v1");
     }
 
     // Place the surface in the scene tree.
@@ -417,6 +572,7 @@ void Compositor::handle_toplevel_destroy(wl_listener* listener,
                                          void* /*data*/) {
     ToplevelCommit* td = wl_container_of(listener, td, destroy);
     Compositor* self = td->compositor;
+    wlr_surface* surface = td->toplevel->base->surface;
 
     // Clear shell/game tracking.
     if (self->shell_toplevel_ == td->toplevel) {
@@ -425,6 +581,14 @@ void Compositor::handle_toplevel_destroy(wl_listener* listener,
     if (self->game_toplevel_ == td->toplevel) {
         wlr_log(WLR_INFO, "game toplevel destroyed — shell regains foreground");
         self->game_toplevel_ = nullptr;
+    }
+
+    // Clear pending surface role assignments.
+    if (self->pending_shell_surface_ == surface) {
+        self->pending_shell_surface_ = nullptr;
+    }
+    if (self->pending_game_surface_ == surface) {
+        self->pending_game_surface_ = nullptr;
     }
 
     wl_list_remove(&td->listener.link);

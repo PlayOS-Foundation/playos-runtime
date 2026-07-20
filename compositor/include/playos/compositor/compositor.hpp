@@ -87,11 +87,23 @@ private:
     int output_width_  = 0;
     int output_height_ = 0;
 
-    /// Track which toplevel is the shell (first client) vs the
-    /// active game (subsequent clients). Used by Home-button
-    /// interception to return to the shell.
+    /// Track which toplevel is the shell vs the active game.
+    /// Assigned via playos_shell_v1 / playos_game_v1 protocol
+    /// requests rather than the old first-client-is-shell heuristic.
     wlr_xdg_toplevel* shell_toplevel_ = nullptr;
     wlr_xdg_toplevel* game_toplevel_  = nullptr;
+
+    /// Pending surface role assignments. When a client calls
+    /// set_shell_surface / set_game_surface before the xdg_toplevel
+    /// exists, the surface pointer is stored here.  Cleared once the
+    /// matching xdg_toplevel appears in handle_new_xdg_toplevel.
+    wlr_surface* pending_shell_surface_ = nullptr;
+    wlr_surface* pending_game_surface_  = nullptr;
+
+    /// Custom protocol globals — created in setup_protocols(),
+    /// destroyed by wl_display_destroy.
+    wl_global* playos_shell_global_ = nullptr;
+    wl_global* playos_game_global_  = nullptr;
 
     // ── Per-device state (owned via wl_listener destroy handlers) ────
 
@@ -146,10 +158,30 @@ private:
     void setup_protocols();
     void spawn_shell(const char* cmd);
 
+    /// Create the playos_shell_v1 and playos_game_v1 globals.
+    void setup_custom_protocols();
+
     /// Intercept the Home (Armoury) button globally: if a game is
     /// active, close it so the shell regains the foreground.
     /// The game toplevel pointer is cleared by the destroy handler.
     void handle_home_button();
+
+public:
+    // ── Custom protocol handlers (static, use wl_resource_get_user_data) ──
+
+    // playos_shell_v1
+    static void shell_bind(wl_client* client, void* data,
+                           uint32_t version, uint32_t id);
+    static void shell_set_shell_surface(wl_client* client,
+                                        wl_resource* resource,
+                                        wl_resource* surface_resource);
+
+    // playos_game_v1
+    static void game_bind(wl_client* client, void* data,
+                          uint32_t version, uint32_t id);
+    static void game_set_game_surface(wl_client* client,
+                                      wl_resource* resource,
+                                      wl_resource* surface_resource);
 };
 
 } // namespace PlayOS
