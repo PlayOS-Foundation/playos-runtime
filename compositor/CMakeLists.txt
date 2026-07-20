@@ -77,6 +77,20 @@ add_custom_command(
     COMMENT "Generating playos_game_v1 protocol"
 )
 
+# ── Compositor control protocol ──────────────────────────────────────
+
+set(PLAYOS_CONTROL_XML "${CMAKE_CURRENT_SOURCE_DIR}/protocol/playos-compositor-control-v1.xml")
+set(PLAYOS_CONTROL_PROTO_H "${CMAKE_CURRENT_BINARY_DIR}/playos-compositor-control-v1-protocol.h")
+set(PLAYOS_CONTROL_PROTO_C "${CMAKE_CURRENT_BINARY_DIR}/playos-compositor-control-v1-protocol.c")
+
+add_custom_command(
+    OUTPUT "${PLAYOS_CONTROL_PROTO_H}" "${PLAYOS_CONTROL_PROTO_C}"
+    COMMAND ${WAYLAND_SCANNER} server-header "${PLAYOS_CONTROL_XML}" "${PLAYOS_CONTROL_PROTO_H}"
+    COMMAND ${WAYLAND_SCANNER} private-code "${PLAYOS_CONTROL_XML}" "${PLAYOS_CONTROL_PROTO_C}"
+    DEPENDS "${PLAYOS_CONTROL_XML}"
+    COMMENT "Generating playos_compositor_control_v1 protocol"
+)
+
 # ── Executable ───────────────────────────────────────────────────────
 
 add_executable(playos-compositor
@@ -85,6 +99,7 @@ add_executable(playos-compositor
     "${XDG_SHELL_PROTO_C}"
     "${PLAYOS_SHELL_PROTO_C}"
     "${PLAYOS_GAME_PROTO_C}"
+    "${PLAYOS_CONTROL_PROTO_C}"
 )
 
 target_compile_features(playos-compositor PRIVATE cxx_std_17)

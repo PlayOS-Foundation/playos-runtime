@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<protocol name="playos_compositor_control_v1">
+  <copyright>
+    Copyright (c) 2026 PlayOS Foundation
+
+    Permission is hereby granted, free of charge, to any person obtaining a
+    copy of this software and associated documentation files (the "Software"),
+    to deal in the Software without restriction, including without limitation
+    the rights to use, copy, modify, merge, publish, distribute, sublicense,
+    and/or sell copies of the Software, and to permit persons to whom the
+    Software is furnished to do so, subject to the following conditions:
+
+    The above copyright notice and this permission notice shall be included
+    in all copies or substantial portions of the Software.
+  </copyright>
+
+  <description summary="PlayOS compositor control interface">
+    Control interface for runtime services (playos-sessiond) to manage
+    the compositor's presentation state. The runtime binds as a Wayland
+    client and uses this protocol to request shell/game activation and
+    receive lifecycle events.
+
+    This is the Stage 2 IPC channel between the compositor and the
+    runtime. Future stages will add overlay control, display-mode
+    management, and presentation-state queries.
+  </description>
+
+  <interface name="playos_compositor_control_v1" version="1">
+    <description summary="compositor control interface">
+      A global interface for runtime-to-compositor control. Only one
+      client may bind this interface at a time (the runtime). If a
+      second client binds, the compositor will close the connection.
+
+      Requests flow from the runtime to the compositor; events flow
+      from the compositor to the runtime.
+    </description>
+
+    <request name="activate_shell">
+      <description summary="close the active game and show the shell">
+        Close the currently active game toplevel (if any) and bring
+        the shell to the foreground. If no game is active, this is
+        a no-op — the shell (if alive) remains in the foreground.
+
+        This is equivalent to pressing the Home button.
+      </description>
+    </request>
+
+    <event name="game_closed">
+      <description summary="active game toplevel was destroyed">
+        Sent when the active game toplevel is destroyed, whether by
+        Home-button press, client disconnect, crash, or an explicit
+        activate_shell request. The runtime should use this event to
+        clean up process state and prepare for the next game launch.
+      </description>
+    </event>
+
+    <event name="shell_closed">
+      <description summary="shell toplevel was destroyed">
+        Sent when the shell toplevel is destroyed. The runtime should
+        restart the shell process when it receives this event.
+      </description>
+    </event>
+  </interface>
+</protocol>

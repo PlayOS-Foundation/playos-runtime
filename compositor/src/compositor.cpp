@@ -27,6 +27,7 @@ extern "C" {
 extern "C" {
 #include "playos-shell-v1-protocol.h"
 #include "playos-game-v1-protocol.h"
+#include "playos-compositor-control-v1-protocol.h"
 }
 
 namespace PlayOS {
@@ -152,6 +153,65 @@ void Compositor::game_bind(wl_client* client, void* data,
 }
 
 // ══════════════════════════════════════════════════════════════════════
+//  playos_compositor_control_v1 implementation
+// ══════════════════════════════════════════════════════════════════════
+
+struct ControlResource {
+    wl_resource* resource;
+    Compositor*  compositor;
+};
+
+void Compositor::control_activate_shell(wl_client* /*client*/,
+                                         wl_resource* resource) {
+    auto* r = static_cast<ControlResource*>(wl_resource_get_user_data(resource));
+    // Reuse the existing Home-button logic: close active game → shell
+    // regains foreground.  The game_closed event will be sent by
+    // handle_toplevel_destroy when the game toplevel is destroyed.
+    r->compositor->handle_home_button();
+    wlr_log(WLR_INFO, "control: activate_shell requested");
+}
+
+static const struct playos_compositor_control_v1_interface control_impl = {
+    .activate_shell = Compositor::control_activate_shell,
+};
+
+void Compositor::control_resource_destroy(wl_resource* resource) {
+    auto* r = static_cast<ControlResource*>(wl_resource_get_user_data(resource));
+    if (r->compositor->control_resource_ == resource) {
+        r->compositor->control_resource_ = nullptr;
+        wlr_log(WLR_INFO, "compositor control client disconnected");
+    }
+    delete r;
+}
+
+void Compositor::control_bind(wl_client* client, void* data,
+                               uint32_t version, uint32_t id) {
+    auto* self = static_cast<Compositor*>(data);
+
+    // Enforce single-control-client policy.
+    if (self->control_resource_) {
+        wlr_log(WLR_ERROR, "compositor control: only one control client allowed");
+        wl_client_post_implementation_error(client,
+            "playos_compositor_control_v1 already bound by another client");
+        return;
+    }
+
+    auto* r = new ControlResource{};
+    r->compositor = self;
+    r->resource = wl_resource_create(
+        client, &playos_compositor_control_v1_interface, version, id);
+    if (!r->resource) {
+        delete r;
+        wl_client_post_no_memory(client);
+        return;
+    }
+    wl_resource_set_implementation(
+        r->resource, &control_impl, r, control_resource_destroy);
+    self->control_resource_ = r->resource;
+    wlr_log(WLR_INFO, "playos_compositor_control_v1 bound (runtime connected)");
+}
+
+// ══════════════════════════════════════════════════════════════════════
 //  Construction / Destruction
 // ══════════════════════════════════════════════════════════════════════
 
@@ -260,7 +320,13 @@ void Compositor::setup_custom_protocols() {
     playos_game_global_ = wl_global_create(
         display_, &playos_game_v1_interface, 1, this, game_bind);
 
-    wlr_log(WLR_INFO, "custom protocols registered: playos_shell_v1, playos_game_v1");
+    // ── playos_compositor_control_v1 ─────────────────────────────
+    playos_control_global_ = wl_global_create(
+        display_, &playos_compositor_control_v1_interface, 1, this,
+        control_bind);
+
+    wlr_log(WLR_INFO, "custom protocols registered: playos_shell_v1, "
+            "playos_game_v1, playos_compositor_control_v1");
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -577,10 +643,20 @@ void Compositor::handle_toplevel_destroy(wl_listener* listener,
     // Clear shell/game tracking.
     if (self->shell_toplevel_ == td->toplevel) {
         self->shell_toplevel_ = nullptr;
+        if (self->control_resource_) {
+            playos_compositor_control_v1_send_shell_closed(
+                self->control_resource_);
+            wlr_log(WLR_INFO, "→ control: shell_closed event sent");
+        }
     }
     if (self->game_toplevel_ == td->toplevel) {
         wlr_log(WLR_INFO, "game toplevel destroyed — shell regains foreground");
         self->game_toplevel_ = nullptr;
+        if (self->control_resource_) {
+            playos_compositor_control_v1_send_game_closed(
+                self->control_resource_);
+            wlr_log(WLR_INFO, "→ control: game_closed event sent");
+        }
     }
 
     // Clear pending surface role assignments.

@@ -102,8 +102,13 @@ private:
 
     /// Custom protocol globals — created in setup_protocols(),
     /// destroyed by wl_display_destroy.
-    wl_global* playos_shell_global_ = nullptr;
-    wl_global* playos_game_global_  = nullptr;
+    wl_global* playos_shell_global_   = nullptr;
+    wl_global* playos_game_global_    = nullptr;
+    wl_global* playos_control_global_ = nullptr;
+
+    /// The runtime's control resource (at most one client).
+    /// Used to send game_closed / shell_closed events.
+    wl_resource* control_resource_ = nullptr;
 
     // ── Per-device state (owned via wl_listener destroy handlers) ────
 
@@ -182,6 +187,13 @@ public:
     static void game_set_game_surface(wl_client* client,
                                       wl_resource* resource,
                                       wl_resource* surface_resource);
+
+    // playos_compositor_control_v1
+    static void control_bind(wl_client* client, void* data,
+                             uint32_t version, uint32_t id);
+    static void control_activate_shell(wl_client* client,
+                                        wl_resource* resource);
+    static void control_resource_destroy(wl_resource* resource);
 };
 
 } // namespace PlayOS
