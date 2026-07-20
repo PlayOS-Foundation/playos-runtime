@@ -299,15 +299,28 @@ void Compositor::handle_keyboard_key(wl_listener* listener, void* data) {
     // Intercept the Home button globally so the player can always
     // return to the shell, even if a game is frozen.
     //
-    // KEY_HOMEPAGE (172) is the standard Linux Home key. On the ROG
-    // Ally the Armoury button is mapped by the kernel driver — the
-    // device profile (RFC-0006) will formalise per-device mappings.
-    // Stage 3+: also intercept gamepad button events.
+    // Match the same keycode set used by the Platform API's evdev
+    // backend (linux_input_backend.cpp + input_mapping.cpp):
+    //   BTN_MODE (316)          — Xbox guide button (ROG Ally default)
+    //   KEY_PROG1 (148)         — ASUS Armoury button
+    //   BTN_TRIGGER_HAPPY1–4    — generic vendor buttons (Steam Deck, etc.)
+    //
+    // See also: playos-reference-devices/rog-ally/device-profile.toml
+    //           playos-platform-api/src/backends/linux/input_mapping.cpp
     if (event->state == WL_KEYBOARD_KEY_STATE_PRESSED &&
-        event->keycode == KEY_HOMEPAGE) {
+        (event->keycode == KEY_PROG1 ||
+         event->keycode == BTN_MODE ||
+         event->keycode == BTN_TRIGGER_HAPPY1 ||
+         event->keycode == BTN_TRIGGER_HAPPY2 ||
+         event->keycode == BTN_TRIGGER_HAPPY3 ||
+         event->keycode == BTN_TRIGGER_HAPPY4)) {
         self->handle_home_button();
         return;
     }
+
+    // Stage 3+: also intercept gamepad button events (BTN_SOUTH, etc.)
+    // for devices that expose Home as a gamepad button rather than a
+    // keyboard key.
 
     wlr_seat_set_keyboard(self->seat_, kb->device);
     wlr_seat_keyboard_notify_key(self->seat_, event->time_msec,
