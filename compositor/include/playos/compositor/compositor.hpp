@@ -87,6 +87,12 @@ private:
     int output_width_  = 0;
     int output_height_ = 0;
 
+    /// Track which toplevel is the shell (first client) vs the
+    /// active game (subsequent clients). Used by Home-button
+    /// interception to return to the shell.
+    wlr_xdg_toplevel* shell_toplevel_ = nullptr;
+    wlr_xdg_toplevel* game_toplevel_  = nullptr;
+
     // ── Per-device state (owned via wl_listener destroy handlers) ────
 
     struct Output {
@@ -139,6 +145,11 @@ private:
     void setup_scene();
     void setup_protocols();
     void spawn_shell(const char* cmd);
+
+    /// Intercept the Home (Armoury) button globally: if a game is
+    /// active, close it so the shell regains the foreground.
+    /// The game toplevel pointer is cleared by the destroy handler.
+    void handle_home_button();
 };
 
 } // namespace PlayOS

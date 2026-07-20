@@ -19,6 +19,7 @@ extern "C" {
 
 #include <cstdlib>
 #include <ctime>
+#include <linux/input-event-codes.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -165,6 +166,19 @@ void Compositor::spawn_shell(const char* cmd) {
     // in Stage 1 — runtime IPC (Stage 2) will formalise this.
 }
 
+void Compositor::handle_home_button() {
+    if (!game_toplevel_) {
+        wlr_log(WLR_INFO, "Home pressed — no game active, ignoring");
+        return;
+    }
+
+    wlr_log(WLR_INFO, "Home pressed — returning to shell");
+    wlr_xdg_toplevel_send_close(game_toplevel_);
+    // game_toplevel_ is cleared in handle_toplevel_destroy when the
+    // client disconnects; the shell (still alive in the background)
+    // regains keyboard focus on its next surface commit.
+}
+
 // ══════════════════════════════════════════════════════════════════════
 //  Output handlers
 // ══════════════════════════════════════════════════════════════════════
@@ -282,6 +296,19 @@ void Compositor::handle_keyboard_key(wl_listener* listener, void* data) {
     Compositor* self = kb->compositor;
     wlr_keyboard_key_event* event = static_cast<wlr_keyboard_key_event*>(data);
 
+    // Intercept the Home button globally so the player can always
+    // return to the shell, even if a game is frozen.
+    //
+    // KEY_HOMEPAGE (172) is the standard Linux Home key. On the ROG
+    // Ally the Armoury button is mapped by the kernel driver — the
+    // device profile (RFC-0006) will formalise per-device mappings.
+    // Stage 3+: also intercept gamepad button events.
+    if (event->state == WL_KEYBOARD_KEY_STATE_PRESSED &&
+        event->keycode == KEY_HOMEPAGE) {
+        self->handle_home_button();
+        return;
+    }
+
     wlr_seat_set_keyboard(self->seat_, kb->device);
     wlr_seat_keyboard_notify_key(self->seat_, event->time_msec,
                                   event->keycode, event->state);
@@ -317,6 +344,14 @@ void Compositor::handle_new_xdg_toplevel(wl_listener* listener, void* data) {
     wlr_log(WLR_INFO, "new xdg toplevel: title='%s' app_id='%s'",
             toplevel->title ? toplevel->title : "(null)",
             toplevel->app_id ? toplevel->app_id : "(null)");
+
+    // The first client is the shell; subsequent clients are games.
+    // Stage 2+: replace with explicit surface roles (playos_shell_v1, etc.).
+    if (!self->shell_toplevel_) {
+        self->shell_toplevel_ = toplevel;
+    } else {
+        self->game_toplevel_ = toplevel;
+    }
 
     // Place the surface in the scene tree.
     wlr_scene_xdg_surface_create(&self->scene_->tree, toplevel->base);
@@ -368,6 +403,17 @@ void Compositor::handle_toplevel_first_commit(wl_listener* listener,
 void Compositor::handle_toplevel_destroy(wl_listener* listener,
                                          void* /*data*/) {
     ToplevelCommit* td = wl_container_of(listener, td, destroy);
+    Compositor* self = td->compositor;
+
+    // Clear shell/game tracking.
+    if (self->shell_toplevel_ == td->toplevel) {
+        self->shell_toplevel_ = nullptr;
+    }
+    if (self->game_toplevel_ == td->toplevel) {
+        wlr_log(WLR_INFO, "game toplevel destroyed — shell regains foreground");
+        self->game_toplevel_ = nullptr;
+    }
+
     wl_list_remove(&td->listener.link);
     wl_list_remove(&td->destroy.link);
     delete td;
