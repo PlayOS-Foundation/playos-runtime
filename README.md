@@ -9,22 +9,31 @@ Runtime Architecture). Platform behavior is specified there first.
 
 ## Status
 
-**v0.2 — ROG Ally confirmed working.**
+**v0.3 — Stage 2 runtime integration complete.**
 
-- **`playos-runtime`** (library) — `PlayOS::Runtime::LaunchAndWait(...)`,
-  launching a child in its own process group (CreateProcess on Windows,
-  fork/exec on POSIX).
-- **`playos-run`** (CLI) — `playos-run <executable> [args...]` launches and
-  waits, returning the child's exit code.
-- **`playos-compositor`** — wlroots 0.19/TinyWL-derived Wayland compositor.
-  DRM/KMS display bring-up, EGL/GLES2 rendering, keyboard input routing,
-  XDG toplevel configure. Built with `-DPLAYOS_BUILD_COMPOSITOR=ON` (Linux only).
+### playos-run (CLI)
+`playos-run <executable> [args...]` launches and waits, returning the child's
+exit code.
 
-### Known limitations (v0.2)
+### playos-compositor (wlroots 0.19, C++17 RAII)
 
-- **No pointer/touch input** — keyboard-only for now.
-- **No audio** — compositor does not wire PipeWire yet.
-- **No suspend/resume** — deferred to Stage 2.
+- DRM/KMS display bring-up, EGL/GLES2 rendering
+- 4-layer scene tree per compositor model (§4): background (shell), game,
+  overlay, system
+- Explicit surface roles via `playos_shell_v1` and `playos_game_v1` protocols
+- Runtime IPC via `playos_compositor_control_v1` (activate shell, game
+  closed/shell closed events)
+- Home-button interception (ROG Ally Armoury button → return to shell)
+- Pointer focus tracking with scene-graph hit-testing (`wlr_scene_node_at`)
+- Touch input routing
+- Shell crash recovery (SIGCHLD handler, auto-respawn)
+- Keyboard input routing through `wlr_seat`
+
+### Known limitations (v0.3)
+
+- No audio (PipeWire not wired yet).
+- No suspend/resume.
+- Overlay and system layers are reserved — protocols not yet implemented.
 - See `compositor/BRINGUP.md` for detailed build & run instructions.
 
 ## Layout
@@ -35,11 +44,30 @@ src/process.cpp                    Shared (platform-agnostic) part
 src/process_windows.cpp            CreateProcess implementation
 src/process_posix.cpp              fork/exec/waitpid implementation
 src/main.cpp                       playos-run CLI
+
+compositor/
+  include/playos/compositor/
+    compositor.hpp                 PlayOS::Compositor class (C++17 RAII)
+  src/
+    compositor.cpp                 Implementation
+    main.cpp                       Entry point
+  protocol/                        Custom Wayland protocol XMLs
+    playos-shell-v1.xml
+    playos-game-v1.xml
+    playos-compositor-control-v1.xml
+  BRINGUP.md                       Build & run guide
 ```
 
 ## Building
 
-Requires CMake >= 3.20 and a C++17 compiler.
+Requires CMake >= 3.20, a C++17 compiler, and wlroots 0.19.
+
+```sh
+cmake -B build -G Ninja -DPLAYOS_BUILD_COMPOSITOR=ON
+cmake --build build
+```
+
+Alternatively, build just the library and CLI (no compositor):
 
 ```sh
 cmake -B build
