@@ -20,6 +20,7 @@ extern "C" {
 #include <cstdlib>
 #include <ctime>
 #include <linux/input-event-codes.h>
+#include <signal.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -291,6 +292,13 @@ void Compositor::setup_scene() {
     scene_ = wlr_scene_create();
     scene_layout_ = wlr_scene_attach_output_layout(scene_, output_layout_);
 
+    // Build the 4-layer z-ordered scene tree per compositor model §4.
+    // Children are rendered first→last, so bottom layer first, top last.
+    background_layer_ = wlr_scene_tree_create(&scene_->tree);
+    game_layer_       = wlr_scene_tree_create(&scene_->tree);
+    overlay_layer_    = wlr_scene_tree_create(&scene_->tree);
+    system_layer_     = wlr_scene_tree_create(&scene_->tree);
+
     new_output_.notify = handle_new_output;
     wl_signal_add(&backend_->events.new_output, &new_output_);
 
@@ -349,6 +357,12 @@ void Compositor::run(const char* shell_cmd) {
     wlr_log(WLR_INFO, "PlayOS compositor running on WAYLAND_DISPLAY=%s",
             socket);
 
+    // Register a SIGCHLD handler on the Wayland event loop so we can
+    // detect when the shell (or other child processes) exits.
+    wl_event_loop* loop = wl_display_get_event_loop(display_);
+    sigchld_source_ = wl_event_loop_add_signal(
+        loop, SIGCHLD, handle_sigchld, this);
+
     spawn_shell(shell_cmd);
     wl_display_run(display_);
 }
@@ -368,8 +382,11 @@ void Compositor::spawn_shell(const char* cmd) {
         execl("/bin/sh", "/bin/sh", "-c", cmd, static_cast<void*>(nullptr));
         _exit(127);
     }
-    // Parent continues; the compositor does not track the shell process
-    // in Stage 1 — runtime IPC (Stage 2) will formalise this.
+
+    // Track the shell process so the SIGCHLD handler can detect when
+    // it exits or crashes and respawn it.
+    shell_pid_ = pid;
+    shell_cmd_ = cmd;
 }
 
 void Compositor::handle_home_button() {
@@ -383,6 +400,44 @@ void Compositor::handle_home_button() {
     // game_toplevel_ is cleared in handle_toplevel_destroy when the
     // client disconnects; the shell (still alive in the background)
     // regains keyboard focus on its next surface commit.
+}
+
+void Compositor::respawn_shell() {
+    if (shell_cmd_.empty()) return;
+    wlr_log(WLR_INFO, "respawning shell: %s", shell_cmd_.c_str());
+    spawn_shell(shell_cmd_.c_str());
+}
+
+int Compositor::handle_sigchld(int /*signal_number*/, void* data) {
+    Compositor* self = static_cast<Compositor*>(data);
+
+    // Reap all dead children so we don't leave zombies.
+    int status;
+    pid_t pid;
+    while ((pid = waitpid(-1, &status, WNOHANG)) > 0) {
+        if (pid == self->shell_pid_) {
+            if (WIFEXITED(status)) {
+                wlr_log(WLR_INFO,
+                        "shell process %d exited with status %d",
+                        pid, WEXITSTATUS(status));
+            } else if (WIFSIGNALED(status)) {
+                wlr_log(WLR_INFO,
+                        "shell process %d killed by signal %d (%s)",
+                        pid, WTERMSIG(status), strsignal(WTERMSIG(status)));
+            }
+            self->shell_pid_ = -1;
+
+            // Respawn the shell. The previous shell's Wayland resources
+            // are cleaned up by handle_toplevel_destroy when the client
+            // disconnects. The new shell instance will bind playos_shell_v1
+            // and create a fresh xdg_toplevel.
+            self->respawn_shell();
+        } else {
+            wlr_log(WLR_INFO, "child process %d reaped (status %d)",
+                    pid, WIFEXITED(status) ? WEXITSTATUS(status) : -1);
+        }
+    }
+    return 0;
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -485,15 +540,64 @@ void Compositor::handle_new_input(wl_listener* listener, void* data) {
         wlr_log(WLR_INFO, "keyboard connected");
         break;
     }
+    case WLR_INPUT_DEVICE_POINTER: {
+        auto* ptr = new Pointer{};
+        ptr->device = wlr_pointer_from_input_device(device);
+        ptr->compositor = self;
+
+        ptr->motion.notify = handle_pointer_motion;
+        wl_signal_add(&ptr->device->events.motion, &ptr->motion);
+
+        ptr->motion_absolute.notify = handle_pointer_motion_absolute;
+        wl_signal_add(&ptr->device->events.motion_absolute,
+                      &ptr->motion_absolute);
+
+        ptr->button.notify = handle_pointer_button;
+        wl_signal_add(&ptr->device->events.button, &ptr->button);
+
+        ptr->axis.notify = handle_pointer_axis;
+        wl_signal_add(&ptr->device->events.axis, &ptr->axis);
+
+        ptr->frame.notify = handle_pointer_frame;
+        wl_signal_add(&ptr->device->events.frame, &ptr->frame);
+
+        ptr->destroy.notify = handle_pointer_destroy;
+        wl_signal_add(&device->events.destroy, &ptr->destroy);
+
+        wlr_log(WLR_INFO, "pointer connected");
+        break;
+    }
+    case WLR_INPUT_DEVICE_TOUCH: {
+        auto* tch = new Touch{};
+        tch->device = wlr_touch_from_input_device(device);
+        tch->compositor = self;
+
+        tch->down.notify = handle_touch_down;
+        wl_signal_add(&tch->device->events.down, &tch->down);
+
+        tch->up.notify = handle_touch_up;
+        wl_signal_add(&tch->device->events.up, &tch->up);
+
+        tch->motion.notify = handle_touch_motion;
+        wl_signal_add(&tch->device->events.motion, &tch->motion);
+
+        tch->cancel.notify = handle_touch_cancel;
+        wl_signal_add(&tch->device->events.cancel, &tch->cancel);
+
+        tch->destroy.notify = handle_touch_destroy;
+        wl_signal_add(&device->events.destroy, &tch->destroy);
+
+        wlr_log(WLR_INFO, "touch connected");
+        break;
+    }
     default:
-        // Pointer and touch are Stage 2.
         break;
     }
 
     // Advertise available seat capabilities.
-    uint32_t caps = 0;
-    caps |= WL_SEAT_CAPABILITY_KEYBOARD;
-    // Stage 2: |= WL_SEAT_CAPABILITY_POINTER | WL_SEAT_CAPABILITY_TOUCH
+    uint32_t caps = WL_SEAT_CAPABILITY_KEYBOARD;
+    caps |= WL_SEAT_CAPABILITY_POINTER;
+    caps |= WL_SEAT_CAPABILITY_TOUCH;
     wlr_seat_set_capabilities(self->seat_, caps);
 }
 
@@ -553,6 +657,191 @@ void Compositor::handle_keyboard_destroy(wl_listener* listener,
 }
 
 // ══════════════════════════════════════════════════════════════════════
+//  Pointer handlers
+// ══════════════════════════════════════════════════════════════════════
+
+void Compositor::handle_pointer_motion(wl_listener* listener, void* data) {
+    Pointer* ptr = wl_container_of(listener, ptr, motion);
+    Compositor* self = ptr->compositor;
+    auto* event = static_cast<wlr_pointer_motion_event*>(data);
+
+    // Update stored cursor position.
+    self->cursor_x_ += event->delta_x;
+    self->cursor_y_ += event->delta_y;
+
+    // Clamp to output bounds.
+    if (self->cursor_x_ < 0) self->cursor_x_ = 0;
+    if (self->cursor_y_ < 0) self->cursor_y_ = 0;
+    if (self->output_width_ > 0 && self->cursor_x_ >= self->output_width_)
+        self->cursor_x_ = self->output_width_ - 1;
+    if (self->output_height_ > 0 && self->cursor_y_ >= self->output_height_)
+        self->cursor_y_ = self->output_height_ - 1;
+
+    // Scene-surface lookup: find the surface under the cursor.
+    double sx = 0, sy = 0;
+    wlr_surface* surface = nullptr;
+    if (self->scene_) {
+        wlr_scene_node* node = wlr_scene_node_at(
+            &self->scene_->tree.node, self->cursor_x_, self->cursor_y_, &sx, &sy);
+        if (node && node->type == WLR_SCENE_NODE_BUFFER) {
+            wlr_scene_buffer* buf = wlr_scene_buffer_from_node(node);
+            wlr_scene_surface* ss = wlr_scene_surface_try_from_buffer(buf);
+            if (ss) surface = ss->surface;
+        }
+    }
+
+    // Update pointer focus if the surface under the cursor changed.
+    if (surface != self->focused_surface_) {
+        wlr_seat_pointer_notify_clear_focus(self->seat_);
+        if (surface) {
+            wlr_seat_pointer_notify_enter(self->seat_, surface, sx, sy);
+        }
+        self->focused_surface_ = surface;
+    }
+
+    wlr_seat_pointer_notify_motion(
+        self->seat_, event->time_msec, event->delta_x, event->delta_y);
+}
+
+void Compositor::handle_pointer_motion_absolute(wl_listener* listener,
+                                                 void* data) {
+    Pointer* ptr = wl_container_of(listener, ptr, motion_absolute);
+    Compositor* self = ptr->compositor;
+    auto* event = static_cast<wlr_pointer_motion_absolute_event*>(data);
+
+    // Map absolute coordinates (0..1) to output dimensions.
+    self->cursor_x_ = event->x * self->output_width_;
+    self->cursor_y_ = event->y * self->output_height_;
+
+    // Scene-surface lookup.
+    double sx = 0, sy = 0;
+    wlr_surface* surface = nullptr;
+    if (self->scene_) {
+        wlr_scene_node* node = wlr_scene_node_at(
+            &self->scene_->tree.node, self->cursor_x_, self->cursor_y_, &sx, &sy);
+        if (node && node->type == WLR_SCENE_NODE_BUFFER) {
+            wlr_scene_buffer* buf = wlr_scene_buffer_from_node(node);
+            wlr_scene_surface* ss = wlr_scene_surface_try_from_buffer(buf);
+            if (ss) surface = ss->surface;
+        }
+    }
+
+    // Update pointer focus if the surface under the cursor changed.
+    if (surface != self->focused_surface_) {
+        wlr_seat_pointer_notify_clear_focus(self->seat_);
+        if (surface) {
+            wlr_seat_pointer_notify_enter(self->seat_, surface, sx, sy);
+        }
+        self->focused_surface_ = surface;
+    }
+
+    wlr_seat_pointer_notify_motion(
+        self->seat_, event->time_msec, self->cursor_x_, self->cursor_y_);
+}
+
+void Compositor::handle_pointer_button(wl_listener* listener, void* data) {
+    Pointer* ptr = wl_container_of(listener, ptr, button);
+    Compositor* self = ptr->compositor;
+    auto* event = static_cast<wlr_pointer_button_event*>(data);
+
+    wlr_seat_pointer_notify_button(
+        self->seat_, event->time_msec, event->button, event->state);
+}
+
+void Compositor::handle_pointer_axis(wl_listener* listener, void* data) {
+    Pointer* ptr = wl_container_of(listener, ptr, axis);
+    Compositor* self = ptr->compositor;
+    auto* event = static_cast<wlr_pointer_axis_event*>(data);
+
+    wlr_seat_pointer_notify_axis(self->seat_, event->time_msec,
+        event->orientation, event->delta, event->delta_discrete,
+        event->source, event->relative_direction);
+}
+
+void Compositor::handle_pointer_frame(wl_listener* listener, void* /*data*/) {
+    Pointer* ptr = wl_container_of(listener, ptr, frame);
+    Compositor* self = ptr->compositor;
+
+    wlr_seat_pointer_notify_frame(self->seat_);
+}
+
+void Compositor::handle_pointer_destroy(wl_listener* listener,
+                                         void* /*data*/) {
+    Pointer* ptr = wl_container_of(listener, ptr, destroy);
+    wl_list_remove(&ptr->motion.link);
+    wl_list_remove(&ptr->motion_absolute.link);
+    wl_list_remove(&ptr->button.link);
+    wl_list_remove(&ptr->axis.link);
+    wl_list_remove(&ptr->frame.link);
+    wl_list_remove(&ptr->destroy.link);
+    delete ptr;
+}
+
+// ══════════════════════════════════════════════════════════════════════
+//  Touch handlers
+// ══════════════════════════════════════════════════════════════════════
+
+void Compositor::handle_touch_down(wl_listener* listener, void* data) {
+    Touch* tch = wl_container_of(listener, tch, down);
+    Compositor* self = tch->compositor;
+    auto* event = static_cast<wlr_touch_down_event*>(data);
+
+    // Route touch to the currently focused surface. On a fullscreen
+    // console compositor this is the right target; a future stage may
+    // add per-coordinate surface lookup via wlr_scene.
+    double sx = event->x;
+    double sy = event->y;
+    if (self->focused_surface_) {
+        wlr_seat_touch_notify_down(self->seat_, self->focused_surface_,
+                                    event->time_msec, event->touch_id,
+                                    sx, sy);
+    }
+}
+
+void Compositor::handle_touch_up(wl_listener* listener, void* data) {
+    Touch* tch = wl_container_of(listener, tch, up);
+    Compositor* self = tch->compositor;
+    auto* event = static_cast<wlr_touch_up_event*>(data);
+
+    wlr_seat_touch_notify_up(self->seat_, event->time_msec,
+                              event->touch_id);
+}
+
+void Compositor::handle_touch_motion(wl_listener* listener, void* data) {
+    Touch* tch = wl_container_of(listener, tch, motion);
+    Compositor* self = tch->compositor;
+    auto* event = static_cast<wlr_touch_motion_event*>(data);
+
+    double sx = event->x;
+    double sy = event->y;
+    wlr_seat_touch_notify_motion(self->seat_, event->time_msec,
+                                  event->touch_id, sx, sy);
+}
+
+void Compositor::handle_touch_cancel(wl_listener* listener, void* data) {
+    Touch* tch = wl_container_of(listener, tch, cancel);
+    Compositor* self = tch->compositor;
+
+    wlr_seat_client* seat_client = nullptr;
+    if (self->focused_surface_) {
+        wl_client* wl = wl_resource_get_client(self->focused_surface_->resource);
+        seat_client = wlr_seat_client_for_wl_client(self->seat_, wl);
+    }
+    wlr_seat_touch_notify_cancel(self->seat_, seat_client);
+}
+
+void Compositor::handle_touch_destroy(wl_listener* listener,
+                                       void* /*data*/) {
+    Touch* tch = wl_container_of(listener, tch, destroy);
+    wl_list_remove(&tch->down.link);
+    wl_list_remove(&tch->up.link);
+    wl_list_remove(&tch->motion.link);
+    wl_list_remove(&tch->cancel.link);
+    wl_list_remove(&tch->destroy.link);
+    delete tch;
+}
+
+// ══════════════════════════════════════════════════════════════════════
 //  XDG toplevel handlers
 // ══════════════════════════════════════════════════════════════════════
 
@@ -587,8 +876,12 @@ void Compositor::handle_new_xdg_toplevel(wl_listener* listener, void* data) {
                 "client must bind playos_shell_v1 or playos_game_v1");
     }
 
-    // Place the surface in the scene tree.
-    wlr_scene_xdg_surface_create(&self->scene_->tree, toplevel->base);
+    // Place the surface in the appropriate scene layer.
+    wlr_scene_tree* target_layer = self->background_layer_;  // default
+    if (self->game_toplevel_ == toplevel) {
+        target_layer = self->game_layer_;
+    }
+    wlr_scene_xdg_surface_create(target_layer, toplevel->base);
     toplevel->base->data = self;
 
     // Defer configuration until the first surface commit so the client
@@ -632,6 +925,12 @@ void Compositor::handle_toplevel_first_commit(wl_listener* listener,
                                        kb->keycodes, kb->num_keycodes,
                                        &kb->modifiers);
     }
+
+    // Set pointer focus on the same surface so the client receives
+    // pointer motion, button, and axis events.
+    self->focused_surface_ = toplevel->base->surface;
+    wlr_seat_pointer_notify_enter(self->seat_, self->focused_surface_, 0, 0);
+    wlr_seat_pointer_notify_frame(self->seat_);
 }
 
 void Compositor::handle_toplevel_destroy(wl_listener* listener,
@@ -665,6 +964,13 @@ void Compositor::handle_toplevel_destroy(wl_listener* listener,
     }
     if (self->pending_game_surface_ == surface) {
         self->pending_game_surface_ = nullptr;
+    }
+
+    // Clear pointer/keyboard focus if this was the focused surface.
+    if (self->focused_surface_ == surface) {
+        self->focused_surface_ = nullptr;
+        wlr_seat_pointer_notify_clear_focus(self->seat_);
+        wlr_seat_keyboard_notify_clear_focus(self->seat_);
     }
 
     wl_list_remove(&td->listener.link);

@@ -26,8 +26,10 @@ extern "C" {
 #include <wlr/types/wlr_keyboard.h>
 #include <wlr/types/wlr_output.h>
 #include <wlr/types/wlr_output_layout.h>
+#include <wlr/types/wlr_pointer.h>
 #include <wlr/types/wlr_seat.h>
 #include <wlr/types/wlr_subcompositor.h>
+#include <wlr/types/wlr_touch.h>
 #include <wlr/types/wlr_xdg_shell.h>
 #include <wlr/util/log.h>
 }
@@ -36,8 +38,11 @@ extern "C" {
 // valid C++), so it is included only in the .cpp file with a workaround.
 // Forward-declare the types we reference here.
 struct wlr_scene;
+struct wlr_scene_tree;
 struct wlr_scene_output_layout;
 struct wlr_scene_output;
+
+#include <string>
 
 namespace PlayOS {
 
@@ -110,6 +115,26 @@ private:
     /// Used to send game_closed / shell_closed events.
     wl_resource* control_resource_ = nullptr;
 
+    /// Surface currently holding keyboard + pointer focus.
+    wlr_surface* focused_surface_ = nullptr;
+
+    /// Cursor position in layout coordinates, updated on pointer motion.
+    double cursor_x_ = 0.0;
+    double cursor_y_ = 0.0;
+
+    /// Layer sub-trees (bottom-to-top z-order per compositor model §4).
+    /// Surfaces are placed into the appropriate layer based on their role.
+    wlr_scene_tree* background_layer_ = nullptr;  // PlayOS Shell
+    wlr_scene_tree* game_layer_       = nullptr;  // active game
+    wlr_scene_tree* overlay_layer_    = nullptr;  // quick menu, HUD, OSD, VK
+    wlr_scene_tree* system_layer_     = nullptr;  // crash / emergency UI
+
+    /// Shell process tracking for crash recovery.
+    /// When the shell exits unexpectedly, the compositor respawns it.
+    pid_t        shell_pid_   = -1;
+    std::string  shell_cmd_;
+    wl_event_source* sigchld_source_ = nullptr;
+
     // ── Per-device state (owned via wl_listener destroy handlers) ────
 
     struct Output {
@@ -124,6 +149,27 @@ private:
         wl_listener   key;
         wl_listener   modifiers;
         wl_listener   destroy;
+    };
+
+    struct Pointer {
+        wlr_pointer* device;
+        Compositor*  compositor;
+        wl_listener  motion;
+        wl_listener  motion_absolute;
+        wl_listener  button;
+        wl_listener  axis;
+        wl_listener  frame;
+        wl_listener  destroy;
+    };
+
+    struct Touch {
+        wlr_touch*  device;
+        Compositor* compositor;
+        wl_listener down;
+        wl_listener up;
+        wl_listener motion;
+        wl_listener cancel;
+        wl_listener destroy;
     };
 
     /// Per-toplevel state used to defer configuration until the first
@@ -153,9 +199,25 @@ private:
     static void handle_keyboard_modifiers(wl_listener* listener, void* data);
     static void handle_keyboard_destroy(wl_listener* listener, void* data);
 
+    static void handle_pointer_motion(wl_listener* listener, void* data);
+    static void handle_pointer_motion_absolute(wl_listener* listener, void* data);
+    static void handle_pointer_button(wl_listener* listener, void* data);
+    static void handle_pointer_axis(wl_listener* listener, void* data);
+    static void handle_pointer_frame(wl_listener* listener, void* data);
+    static void handle_pointer_destroy(wl_listener* listener, void* data);
+
+    static void handle_touch_down(wl_listener* listener, void* data);
+    static void handle_touch_up(wl_listener* listener, void* data);
+    static void handle_touch_motion(wl_listener* listener, void* data);
+    static void handle_touch_cancel(wl_listener* listener, void* data);
+    static void handle_touch_destroy(wl_listener* listener, void* data);
+
     // Toplevel commit handlers
     static void handle_toplevel_first_commit(wl_listener* listener, void* data);
     static void handle_toplevel_destroy(wl_listener* listener, void* data);
+
+    // Crash recovery
+    static int handle_sigchld(int signal_number, void* data);
 
     // ── Internal helpers ─────────────────────────────────────────────
 
@@ -170,6 +232,9 @@ private:
     /// active, close it so the shell regains the foreground.
     /// The game toplevel pointer is cleared by the destroy handler.
     void handle_home_button();
+
+    /// Re-launch the shell after it has exited or crashed.
+    void respawn_shell();
 
 public:
     // ── Custom protocol handlers (static, use wl_resource_get_user_data) ──
