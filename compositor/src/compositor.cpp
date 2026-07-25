@@ -468,8 +468,12 @@ void Compositor::handle_new_output(wl_listener* listener, void* data) {
     wlr_output_commit_state(wlr_output, &state);
     wlr_output_state_finish(&state);
 
-    // Cache dimensions from the first output for toplevel configure.
-    if (self->output_width_ == 0 && self->output_height_ == 0) {
+    // Track the largest output dimensions for toplevel configure.
+    // With mirrored outputs, we configure the shell at the largest
+    // display size. The shell uses Render2Texture to scale its design
+    // resolution (1920x1080) to the compositor-assigned window size.
+    if (wlr_output->width > self->output_width_ ||
+        wlr_output->height > self->output_height_) {
         self->output_width_  = wlr_output->width;
         self->output_height_ = wlr_output->height;
     }
