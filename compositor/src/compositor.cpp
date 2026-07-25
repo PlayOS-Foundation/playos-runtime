@@ -468,17 +468,22 @@ void Compositor::handle_new_output(wl_listener* listener, void* data) {
     wlr_output_commit_state(wlr_output, &state);
     wlr_output_state_finish(&state);
 
-    // Cache dimensions for toplevel configure.
-    self->output_width_  = wlr_output->width;
-    self->output_height_ = wlr_output->height;
+    // Cache dimensions from the first output for toplevel configure.
+    if (self->output_width_ == 0 && self->output_height_ == 0) {
+        self->output_width_  = wlr_output->width;
+        self->output_height_ = wlr_output->height;
+    }
 
     // Per-output bookkeeping.
     auto* output = new Output{wlr_output, self, {}};
     output->frame.notify = handle_output_frame;
     wl_signal_add(&wlr_output->events.frame, &output->frame);
 
+    // Mirror all outputs at (0,0) so the shell appears on every display.
+    // A console UI should be visible on all connected screens, not split
+    // across a multi-monitor desktop arrangement.
     wlr_output_layout_output* layout_output =
-        wlr_output_layout_add_auto(self->output_layout_, wlr_output);
+        wlr_output_layout_add(self->output_layout_, wlr_output, 0, 0);
     wlr_scene_output* scene_output =
         wlr_scene_output_create(self->scene_, wlr_output);
     wlr_scene_output_layout_add_output(self->scene_layout_, layout_output,
