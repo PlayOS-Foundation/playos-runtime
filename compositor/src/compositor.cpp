@@ -461,22 +461,37 @@ void Compositor::handle_new_output(wl_listener* listener, void* data) {
     wlr_output_state_set_enabled(&state, true);
 
     wlr_output_mode* mode = wlr_output_preferred_mode(wlr_output);
+    if (!mode && !wl_list_empty(&wlr_output->modes)) {
+        // Some outputs (e.g. DP-2 on amdgpu) don't flag a preferred mode.
+        // Fall back to the first listed mode.
+        mode = wl_container_of(wlr_output->modes.next, mode, link);
+    }
     if (mode) {
-        wlr_output_state_set_mode(&state, mode);
+        // Lock all outputs to 1920x1080 so the shell (which renders at
+        // 1080p) fills every display identically without per-output scaling.
+        if (mode->width > 1920 || mode->height > 1080) {
+            wlr_log(WLR_INFO, "output %s: preferred %dx%d > 1080p, forcing 1920x1080@60",
+                    wlr_output->name, mode->width, mode->height);
+            wlr_output_state_set_custom_mode(&state, 1920, 1080, 60000);
+        } else {
+            wlr_output_state_set_mode(&state, mode);
+        }
     }
 
     wlr_output_commit_state(wlr_output, &state);
     wlr_output_state_finish(&state);
 
-    // Track the largest output dimensions for toplevel configure.
-    // With mirrored outputs, we configure the shell at the largest
-    // display size. The shell uses Render2Texture to scale its design
-    // resolution (1920x1080) to the compositor-assigned window size.
-    if (wlr_output->width > self->output_width_ ||
-        wlr_output->height > self->output_height_) {
+    // Cache dimensions from the first output for toplevel configure.
+    // All outputs are locked to 1920x1080 via custom mode above, so the
+    // shell fills every display identically without per-output scaling.
+    if (self->output_width_ == 0 && self->output_height_ == 0) {
         self->output_width_  = wlr_output->width;
         self->output_height_ = wlr_output->height;
     }
+    wlr_log(WLR_INFO, "output_size: %s %dx%d, tracked=%dx%d",
+            wlr_output->name,
+            wlr_output->width, wlr_output->height,
+            self->output_width_, self->output_height_);
 
     // Per-output bookkeeping.
     auto* output = new Output{wlr_output, self, {}};
@@ -490,6 +505,7 @@ void Compositor::handle_new_output(wl_listener* listener, void* data) {
         wlr_output_layout_add(self->output_layout_, wlr_output, 0, 0);
     wlr_scene_output* scene_output =
         wlr_scene_output_create(self->scene_, wlr_output);
+
     wlr_scene_output_layout_add_output(self->scene_layout_, layout_output,
                                        scene_output);
 }
@@ -918,6 +934,9 @@ void Compositor::handle_toplevel_first_commit(wl_listener* listener,
     // Reconfigure on every commit so the shell gets proper size after
     // returning from a fullscreen sample. Only reconfigure if the size
     // differs to avoid an infinite configure→commit loop.
+    wlr_log(WLR_INFO, "toplevel_first_commit: output=%dx%d surface_geo=%dx%d",
+            self->output_width_, self->output_height_,
+            surface->geometry.width, surface->geometry.height);
     if (self->output_width_ > 0 && self->output_height_ > 0 &&
         (surface->geometry.width  != self->output_width_ ||
          surface->geometry.height != self->output_height_)) {
