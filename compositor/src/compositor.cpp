@@ -497,6 +497,8 @@ void Compositor::handle_new_output(wl_listener* listener, void* data) {
     auto* output = new Output{wlr_output, self, {}};
     output->frame.notify = handle_output_frame;
     wl_signal_add(&wlr_output->events.frame, &output->frame);
+    output->destroy.notify = handle_output_destroy;
+    wl_signal_add(&wlr_output->events.destroy, &output->destroy);
 
     // Mirror all outputs at (0,0) so the shell appears on every display.
     // A console UI should be visible on all connected screens, not split
@@ -528,6 +530,16 @@ void Compositor::handle_output_frame(wl_listener* listener, void* /*data*/) {
     timespec now{};
     clock_gettime(CLOCK_MONOTONIC, &now);
     wlr_scene_output_send_frame_done(scene_output, &now);
+}
+
+void Compositor::handle_output_destroy(wl_listener* listener, void* /*data*/) {
+    Output* output = wl_container_of(listener, output, destroy);
+
+    wlr_log(WLR_INFO, "output %s disconnected", output->output->name);
+
+    wl_list_remove(&output->frame.link);
+    wl_list_remove(&output->destroy.link);
+    delete output;
 }
 
 // ══════════════════════════════════════════════════════════════════════

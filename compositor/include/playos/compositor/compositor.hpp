@@ -141,6 +141,7 @@ private:
         wlr_output*  output;
         Compositor*  compositor;
         wl_listener  frame;
+        wl_listener  destroy;
     };
 
     struct Keyboard {
@@ -195,6 +196,7 @@ private:
 
     // Device-level handlers
     static void handle_output_frame(wl_listener* listener, void* data);
+    static void handle_output_destroy(wl_listener* listener, void* data);
     static void handle_keyboard_key(wl_listener* listener, void* data);
     static void handle_keyboard_modifiers(wl_listener* listener, void* data);
     static void handle_keyboard_destroy(wl_listener* listener, void* data);
