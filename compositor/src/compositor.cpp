@@ -250,11 +250,14 @@ bool Compositor::init() {
 
     // VERSION-SENSITIVE: wlr_backend_autocreate takes an event loop in
     // wlroots 0.18+ (earlier versions took the wl_display).
+    wlr_log(WLR_INFO, "probing backends (DRM, libinput)...");
     backend_ = wlr_backend_autocreate(loop, nullptr);
     if (!backend_) {
-        wlr_log(WLR_ERROR, "failed to create wlr_backend");
+        wlr_log(WLR_ERROR, "failed to create wlr_backend — is seatd running? "
+                "is a DRM device available? (check /dev/dri/card*)");
         return false;
     }
+    wlr_log(WLR_INFO, "backend created successfully");
 
     renderer_ = wlr_renderer_autocreate(backend_);
     if (!renderer_) {
@@ -349,7 +352,8 @@ void Compositor::run(const char* shell_cmd) {
     }
 
     if (!wlr_backend_start(backend_)) {
-        wlr_log(WLR_ERROR, "failed to start backend");
+        wlr_log(WLR_ERROR, "failed to start backend — could not acquire DRM master "
+                "(another compositor or X server may be running)");
         return;
     }
 
