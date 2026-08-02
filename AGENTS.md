@@ -5,9 +5,9 @@ This repository contains the **internal runtime IPC layer** — the Unix domain 
 ## Specification Reference
 
 Before touching any file here, read:
-- [`playos-spec/src/runtime-ipc.md`](https://github.com/your-org/playos-spec/blob/main/src/runtime-ipc.md) — IPC framing, all message types, lifecycle fd protocol
-- [`playos-spec/src/wayland-protocol.md`](https://github.com/your-org/playos-spec/blob/main/src/wayland-protocol.md) — private Wayland protocol design and trust model
-- [`playos-spec/src/security-model.md`](https://github.com/your-org/playos-spec/blob/main/src/security-model.md) — socket permissions, trusted group
+- [`playos-spec/src/runtime-ipc.md`](https://github.com/PlayOS-Foundation/playos-spec/blob/main/src/runtime-ipc.md) — IPC framing, all message types, lifecycle fd protocol
+- [`playos-spec/src/wayland-protocol.md`](https://github.com/PlayOS-Foundation/playos-spec/blob/main/src/wayland-protocol.md) — private Wayland protocol design and trust model
+- [`playos-spec/src/security-model.md`](https://github.com/PlayOS-Foundation/playos-spec/blob/main/src/security-model.md) — socket permissions, trusted group
 
 ## Repository Layout
 

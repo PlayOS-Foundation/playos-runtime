@@ -21,14 +21,14 @@
 
 ## IPC Protocol
 
-See [`playos-spec/runtime-ipc.md`](https://github.com/your-org/playos-spec/blob/main/runtime-ipc.md) for the full protocol specification.
+See [`playos-spec/runtime-ipc.md`](https://github.com/PlayOS-Foundation/playos-spec/blob/main/runtime-ipc.md) for the full protocol specification.
 
 Current protocol version: **1**
 
 ## Wayland Protocol
 
 Private protocol XML: `protocols/playos-v1.xml`  
-See [`playos-spec/wayland-protocol.md`](https://github.com/your-org/playos-spec/blob/main/wayland-protocol.md) for specification.
+See [`playos-spec/wayland-protocol.md`](https://github.com/PlayOS-Foundation/playos-spec/blob/main/wayland-protocol.md) for specification.
 
 Generate bindings:
 ```bash
