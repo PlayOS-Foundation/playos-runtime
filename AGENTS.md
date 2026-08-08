@@ -1,5 +1,7 @@
 # AGENTS.md — playos-runtime
 
+> **Implementation status:** 🟡 In Progress — Wayland protocol XML (`protocols/playos-v1.xml`) exists. IPC C source (`include/`, `src/`, `tests/`) not yet implemented. This AGENTS.md describes the **target** structure.
+
 This repository contains the **internal runtime IPC layer** — the Unix domain socket protocol and Wayland protocol XML that connect `playos-init`, `playos-compositor`, `playos-shell`, and `playos-overlay`. Games do not use this directly; they go through `libplayos` (see `playos-platform-api`).
 
 ## Specification Reference
