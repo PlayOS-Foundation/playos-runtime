@@ -1,8 +1,8 @@
 # AGENTS.md — playos-runtime
 
-> **Implementation status:** 🟡 In Progress — Wayland protocol XML (`protocols/playos-v1.xml`) exists. IPC C source (`include/`, `src/`, `tests/`) not yet implemented. This AGENTS.md describes the **target** structure.
+> **Implementation status:** 🟡 Protocol-only — `protocols/playos-v1.xml` defines 4 Wayland interfaces. The runtime IPC C sources previously planned here now live in `playos-refdistro/src/playos-init/ipc/`. This repository is the canonical source for the protocol XML; it contains no C implementation code.
 
-This repository contains the **internal runtime IPC layer** — the Unix domain socket protocol and Wayland protocol XML that connect `playos-init`, `playos-compositor`, `playos-shell`, and `playos-overlay`. Games do not use this directly; they go through `libplayos` (see `playos-platform-api`).
+This repository defines the **internal runtime protocols** — the Wayland protocol XML and IPC message types that connect `playos-init`, `playos-compositor`, `playos-shell`, and `playos-overlay`. Games do not use this directly; they go through `libplayos` (see `playos-platform-api`).
 
 ## Specification Reference
 
@@ -18,18 +18,12 @@ protocols/
 └── playos-v1.xml       ← Private Wayland protocol XML (4 interfaces)
 
 include/playos-runtime/
-└── ipc.h               ← Message type definitions, framing constants
+└── (empty — IPC headers live in playos-refdistro/src/playos-init/ipc/)
 
-src/
-├── ipc_client.c        ← Client-side connect / send / recv helpers
-├── ipc_server.c        ← Server-side listen / dispatch helpers
-└── lifecycle_fd.c      ← Lifecycle pipe fd helpers
-
-tests/
-└── ...
-
-CMakeLists.txt
+CMakeLists.txt           ← wayland-scanner glue generation only
 ```
+
+> **Note:** IPC C sources (`ipc_client.c`, `ipc_server.c`, `lifecycle_fd.c`) and headers moved to `playos-refdistro/src/playos-init/ipc/`. This repo is the canonical home for the protocol XML only.
 
 ## IPC Protocol Rules — Critical
 
