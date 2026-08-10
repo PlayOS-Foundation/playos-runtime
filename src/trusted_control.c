@@ -1,0 +1,212 @@
+/**
+ * trusted_control.c — PlayOS Trusted Control IPC Client
+ *
+ * Sends commands over /run/playos/control.sock to playos-init.
+ * Each operation is a separate connect→send→recv→close cycle.
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
+#define _GNU_SOURCE
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <errno.h>
+
+/* IPC framing — bundled from playos-refdistro/src/playos-init/ipc/ */
+#include "ipc.h"
+
+#include "playos-runtime/trusted_control.h"
+
+/* ── Internal helpers ────────────────────────────────────────────── */
+
+/** Default control socket path. */
+#define CONTROL_SOCK_PATH "/run/playos/control.sock"
+
+/** Max frame buffer: header + 64 KiB body. */
+#define FRAME_BUF_SIZE (sizeof(struct playos_ipc_frame) + PLAYOS_IPC_MAX_BODY)
+
+/**
+ * Send a message and wait for a response.
+ *
+ * Opens a fresh connection, sends `msg`, receives response into `buf`.
+ * Server closes after one request — we close our end too.
+ *
+ * @param msg   Message to send (caller must free after).
+ * @param buf   Buffer for the response body (at least bufsz bytes).
+ * @param bufsz Size of buf.
+ * @return      0 on success, -1 on error.
+ */
+static int
+send_and_recv(struct playos_ipc_message *msg, char *buf, size_t bufsz)
+{
+    int ret = -1;
+    int fd = playos_ipc_client_connect(CONTROL_SOCK_PATH);
+    if (fd < 0) {
+        fprintf(stderr, "[E] trusted_control: connect to %s failed: %s\n",
+                CONTROL_SOCK_PATH, strerror(errno));
+        goto done;
+    }
+
+    /* Send */
+    if (playos_ipc_client_send(fd, msg) != 0) {
+        fprintf(stderr, "[E] trusted_control: send failed\n");
+        goto close_fd;
+    }
+
+    /* Receive response */
+    struct playos_ipc_message resp;
+    memset(&resp, 0, sizeof(resp));
+    int n = playos_ipc_client_recv(fd, &resp, FRAME_BUF_SIZE);
+    if (n <= 0) {
+        fprintf(stderr, "[E] trusted_control: recv failed (n=%d)\n", n);
+        goto close_fd;
+    }
+
+    /* Copy response body to caller buffer */
+    if (buf && bufsz > 0) {
+        size_t copy_len = resp.json_len < bufsz - 1 ? resp.json_len : bufsz - 1;
+        memcpy(buf, resp.json_raw, copy_len);
+        buf[copy_len] = '\0';
+    }
+
+    /* Check for error response */
+    if (resp.type && strcmp(resp.type, PLAYOS_IPC_TYPE_ERROR) == 0) {
+        fprintf(stderr, "[E] trusted_control: server returned Error\n");
+        playos_ipc_message_free(&resp);
+        goto close_fd;
+    }
+    if (resp.type && strcmp(resp.type, PLAYOS_IPC_TYPE_LAUNCH_GAME_ERROR) == 0) {
+        fprintf(stderr, "[E] trusted_control: LaunchGameError: %s\n",
+                buf ? buf : "(no details)");
+        playos_ipc_message_free(&resp);
+        goto close_fd;
+    }
+
+    playos_ipc_message_free(&resp);
+    ret = 0;
+
+close_fd:
+    close(fd);
+done:
+    return ret;
+}
+
+/* ── Connection management ──────────────────────────────────────── */
+
+int
+playos_trusted_connect(void)
+{
+    return playos_ipc_client_connect(CONTROL_SOCK_PATH);
+}
+
+void
+playos_trusted_disconnect(int fd)
+{
+    if (fd >= 0)
+        close(fd);
+}
+
+/* ── Operations ─────────────────────────────────────────────────── */
+
+int
+playos_trusted_launch_game(int fd, const char *game_id)
+{
+    (void)fd; /* We open our own connection per operation */
+
+    char extra[256];
+    int n = snprintf(extra, sizeof(extra),
+                     "\"game_id\":\"%s\",\"manifest_path\":\"\"",
+                     game_id);
+    if (n < 0 || (size_t)n >= sizeof(extra))
+        return -1;
+
+    struct playos_ipc_message msg;
+    memset(&msg, 0, sizeof(msg));
+    if (playos_ipc_message_from_type(PLAYOS_IPC_PROTOCOL_VERSION,
+                                     PLAYOS_IPC_TYPE_LAUNCH_GAME,
+                                     extra, &msg) != 0)
+        return -1;
+
+    char buf[512] = {0};
+    int ret = send_and_recv(&msg, buf, sizeof(buf));
+    playos_ipc_message_free(&msg);
+
+    if (ret == 0) {
+        fprintf(stderr, "[I] trusted_control: LaunchGame '%s' → %s\n",
+                game_id, buf);
+    }
+    return ret;
+}
+
+int
+playos_trusted_terminate_game(int fd)
+{
+    (void)fd;
+
+    struct playos_ipc_message msg;
+    memset(&msg, 0, sizeof(msg));
+    if (playos_ipc_message_from_type(PLAYOS_IPC_PROTOCOL_VERSION,
+                                     PLAYOS_IPC_TYPE_TERMINATE_GAME,
+                                     NULL, &msg) != 0)
+        return -1;
+
+    char buf[256] = {0};
+    int ret = send_and_recv(&msg, buf, sizeof(buf));
+    playos_ipc_message_free(&msg);
+    return ret;
+}
+
+int
+playos_trusted_query_status(int fd, char *status_buf, size_t bufsz)
+{
+    (void)fd;
+
+    struct playos_ipc_message msg;
+    memset(&msg, 0, sizeof(msg));
+    if (playos_ipc_message_from_type(PLAYOS_IPC_PROTOCOL_VERSION,
+                                     PLAYOS_IPC_TYPE_QUERY_STATUS,
+                                     NULL, &msg) != 0)
+        return -1;
+
+    int ret = send_and_recv(&msg, status_buf, bufsz);
+    playos_ipc_message_free(&msg);
+    return ret;
+}
+
+int
+playos_trusted_shutdown(int fd)
+{
+    (void)fd;
+
+    struct playos_ipc_message msg;
+    memset(&msg, 0, sizeof(msg));
+    if (playos_ipc_message_from_type(PLAYOS_IPC_PROTOCOL_VERSION,
+                                     PLAYOS_IPC_TYPE_SHUTDOWN,
+                                     NULL, &msg) != 0)
+        return -1;
+
+    char buf[128] = {0};
+    int ret = send_and_recv(&msg, buf, sizeof(buf));
+    playos_ipc_message_free(&msg);
+    return ret;
+}
+
+int
+playos_trusted_reboot(int fd)
+{
+    (void)fd;
+
+    struct playos_ipc_message msg;
+    memset(&msg, 0, sizeof(msg));
+    if (playos_ipc_message_from_type(PLAYOS_IPC_PROTOCOL_VERSION,
+                                     PLAYOS_IPC_TYPE_REBOOT,
+                                     NULL, &msg) != 0)
+        return -1;
+
+    char buf[128] = {0};
+    int ret = send_and_recv(&msg, buf, sizeof(buf));
+    playos_ipc_message_free(&msg);
+    return ret;
+}
