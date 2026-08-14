@@ -1,6 +1,6 @@
 # AGENTS.md — playos-runtime
 
-> **Implementation status:** 🟡 Protocol-only — `protocols/playos-v1.xml` defines 4 Wayland interfaces. The runtime IPC C sources previously planned here now live in `playos-refdistro/src/playos-init/ipc/`. This repository is the canonical source for the protocol XML; it contains no C implementation code.
+> **Implementation status:** 🟡 Protocol-only — `protocols/playos-v1.xml` defines 3 Wayland interfaces. The runtime IPC C sources previously planned here now live in `playos-refdistro/src/playos-init/ipc/`. This repository is the canonical source for the protocol XML; it contains no C implementation code.
 
 This repository defines the **internal runtime protocols** — the Wayland protocol XML and IPC message types that connect `playos-init`, `playos-compositor`, `playos-shell`, and `playos-overlay`. Games do not use this directly; they go through `libplayos` (see `playos-platform-api`).
 
@@ -15,7 +15,7 @@ Before touching any file here, read:
 
 ```
 protocols/
-└── playos-v1.xml       ← Private Wayland protocol XML (4 interfaces)
+└── playos-v1.xml       ← Private Wayland protocol XML (3 interfaces)
 
 include/playos-runtime/
 └── (empty — IPC headers live in playos-refdistro/src/playos-init/ipc/)
@@ -36,8 +36,8 @@ CMakeLists.txt           ← wayland-scanner glue generation only
 ## Wayland Protocol Rules
 
 - `protocols/playos-v1.xml` is consumed by `wayland-scanner` in `playos-compositor` and `playos-shell`. Do not rename interfaces or requests without bumping the version attribute and coordinating with both consumers.
-- The four interfaces are: `playos_session_manager`, `playos_game_surface`, `playos_overlay_surface`, `playos_input_router`. Do not merge or split them without an ADR.
-- Only `playos-trusted` group processes may bind `playos_session_manager`.
+- The three interfaces are: `playos_manager_v1`, `playos_shell_v1`, `playos_overlay_v1`. Do not merge or split them without an ADR.
+- Only `playos-trusted` group processes may bind `playos_manager_v1`.
 
 ## Code Conventions
 

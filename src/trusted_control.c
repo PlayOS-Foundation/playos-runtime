@@ -13,6 +13,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
+#include <fcntl.h>
 
 /* IPC framing — bundled from playos-refdistro/src/playos-init/ipc/ */
 #include "ipc.h"
@@ -106,6 +107,75 @@ playos_trusted_disconnect(int fd)
 {
     if (fd >= 0)
         close(fd);
+}
+
+int
+playos_trusted_register_shell(void)
+{
+    int fd = playos_ipc_client_connect(CONTROL_SOCK_PATH);
+    if (fd < 0) {
+        fprintf(stderr, "[E] trusted_control: shell register connect to %s failed: %s\n",
+                CONTROL_SOCK_PATH, strerror(errno));
+        return -1;
+    }
+
+    struct playos_ipc_message msg;
+    memset(&msg, 0, sizeof(msg));
+    if (playos_ipc_message_from_type(PLAYOS_IPC_PROTOCOL_VERSION,
+                                     PLAYOS_IPC_TYPE_SHELL_READY,
+                                     NULL, &msg) != 0) {
+        close(fd);
+        return -1;
+    }
+
+    if (playos_ipc_client_send(fd, &msg) != 0) {
+        fprintf(stderr, "[E] trusted_control: ShellReady send failed: %s\n",
+                strerror(errno));
+        playos_ipc_message_free(&msg);
+        close(fd);
+        return -1;
+    }
+    playos_ipc_message_free(&msg);
+
+    /* Keep this connection open: playos-init promotes it to the persistent
+     * shell listener and streams GameStarted/GameExited/GameCrashed here.
+     * The caller owns the fd and must poll it via
+     * playos_trusted_shell_poll() and close it with
+     * playos_trusted_disconnect(). */
+    return fd;
+}
+
+int
+playos_trusted_shell_poll(int fd, char *type_buf, size_t type_bufsz)
+{
+    if (fd < 0)
+        return 0;
+
+    /* Polled from the shell's render loop — make the fd non-blocking so a
+     * slow/missing event never stalls a frame. */
+    int flags = fcntl(fd, F_GETFL, 0);
+    if (flags >= 0)
+        (void)fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+
+    struct playos_ipc_message msg;
+    memset(&msg, 0, sizeof(msg));
+
+    int n = playos_ipc_client_recv(fd, &msg, FRAME_BUF_SIZE);
+    if (n == 0) {
+        /* Server closed the listener connection. */
+        return -1;
+    }
+    if (n < 0) {
+        if (errno == EAGAIN || errno == EWOULDBLOCK)
+            return 0;   /* no event pending */
+        return -1;
+    }
+
+    if (type_buf && type_bufsz > 0 && msg.type)
+        snprintf(type_buf, type_bufsz, "%s", msg.type);
+
+    playos_ipc_message_free(&msg);
+    return 1;
 }
 
 /* ── Operations ─────────────────────────────────────────────────── */

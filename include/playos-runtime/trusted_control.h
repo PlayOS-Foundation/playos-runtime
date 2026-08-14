@@ -33,6 +33,41 @@ int playos_trusted_connect(void);
  */
 void playos_trusted_disconnect(int fd);
 
+/* ── Persistent shell listener (Sprint 7) ────────────────────────── */
+
+/* Async event types delivered to a registered shell listener. Values
+ * match the wire "type" strings defined in the shared IPC header. */
+#define PLAYOS_TRUSTED_EVENT_GAME_STARTED              "GameStarted"
+#define PLAYOS_TRUSTED_EVENT_GAME_EXITED               "GameExited"
+#define PLAYOS_TRUSTED_EVENT_GAME_CRASHED              "GameCrashed"
+#define PLAYOS_TRUSTED_EVENT_COMPOSITOR_STATE_CHANGED  "CompositorStateChanged"
+
+/**
+ * Register this process as the persistent shell event listener.
+ *
+ * Connects to /run/playos/control.sock, sends ShellReady, and KEEPS the
+ * connection open. playos-init promotes this fd to its shell_listener_fd
+ * and streams asynchronous GameStarted/GameExited/GameCrashed events to
+ * it. There is no response to ShellReady — success is a live connection.
+ *
+ * @return  fd on success (caller owns it, poll with
+ *          playos_trusted_shell_poll(), close with
+ *          playos_trusted_disconnect()), or -1 on error.
+ */
+int playos_trusted_register_shell(void);
+
+/**
+ * Non-blocking poll of the shell listener fd for one async event.
+ *
+ * @param fd          Listener fd from playos_trusted_register_shell().
+ * @param type_buf    Buffer to receive the event "type" string (optional).
+ * @param type_bufsz  Size of type_buf.
+ * @return            1 if an event was received (type copied to type_buf),
+ *                    0 if no event is pending,
+ *                    -1 on error or if the server closed the connection.
+ */
+int playos_trusted_shell_poll(int fd, char *type_buf, size_t type_bufsz);
+
 /* ── Operations ─────────────────────────────────────────────────── */
 
 /**
