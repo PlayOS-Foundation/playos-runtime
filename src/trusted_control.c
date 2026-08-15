@@ -94,6 +94,35 @@ done:
     return ret;
 }
 
+/**
+ * Send a message and close the connection without waiting for a response.
+ *
+ * For fire-and-forget requests (e.g. Suspend) where playos-init performs the
+ * action synchronously and sends no reply.
+ *
+ * @param msg   Message to send (caller must free after).
+ * @return      0 if the message was sent, -1 on error.
+ */
+static int
+send_only(struct playos_ipc_message *msg)
+{
+    int ret = -1;
+    int fd = playos_ipc_client_connect(CONTROL_SOCK_PATH);
+    if (fd < 0) {
+        fprintf(stderr, "[E] trusted_control: connect to %s failed: %s\n",
+                CONTROL_SOCK_PATH, strerror(errno));
+        return -1;
+    }
+
+    if (playos_ipc_client_send(fd, msg) != 0)
+        fprintf(stderr, "[E] trusted_control: send failed\n");
+    else
+        ret = 0;
+
+    close(fd);
+    return ret;
+}
+
 /* ── Connection management ──────────────────────────────────────── */
 
 int
@@ -277,6 +306,66 @@ playos_trusted_reboot(int fd)
 
     char buf[128] = {0};
     int ret = send_and_recv(&msg, buf, sizeof(buf));
+    playos_ipc_message_free(&msg);
+    return ret;
+}
+
+static const char *
+perf_profile_wire_name(int profile)
+{
+    switch (profile) {
+    case 1:  return "power_save";
+    case 2:  return "performance";
+    case 0:
+    default: return "balanced";
+    }
+}
+
+int
+playos_trusted_set_perf_profile(int fd, int profile)
+{
+    (void)fd;
+
+    if (profile < 0 || profile > 2)
+        return -1;
+
+    char extra[128];
+    int n = snprintf(extra, sizeof(extra), "\"profile\":\"%s\"",
+                     perf_profile_wire_name(profile));
+    if (n < 0 || (size_t)n >= sizeof(extra))
+        return -1;
+
+    struct playos_ipc_message msg;
+    memset(&msg, 0, sizeof(msg));
+    if (playos_ipc_message_from_type(PLAYOS_IPC_PROTOCOL_VERSION,
+                                     PLAYOS_IPC_TYPE_SET_PERF_PROFILE,
+                                     extra, &msg) != 0)
+        return -1;
+
+    char buf[256] = {0};
+    int ret = send_and_recv(&msg, buf, sizeof(buf));
+    playos_ipc_message_free(&msg);
+
+    if (ret == 0 && strstr(buf, "\"accepted\":false") != NULL)
+        ret = -1;
+    return ret;
+}
+
+int
+playos_trusted_suspend(int fd)
+{
+    (void)fd;
+
+    struct playos_ipc_message msg;
+    memset(&msg, 0, sizeof(msg));
+    if (playos_ipc_message_from_type(PLAYOS_IPC_PROTOCOL_VERSION,
+                                     PLAYOS_IPC_TYPE_SUSPEND,
+                                     NULL, &msg) != 0)
+        return -1;
+
+    /* Suspend is fire-and-forget: playos-init sends no response (it blocks
+     * writing to /sys/power/state). Send and close without waiting. */
+    int ret = send_only(&msg);
     playos_ipc_message_free(&msg);
     return ret;
 }

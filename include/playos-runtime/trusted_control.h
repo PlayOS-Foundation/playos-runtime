@@ -41,6 +41,8 @@ void playos_trusted_disconnect(int fd);
 #define PLAYOS_TRUSTED_EVENT_GAME_EXITED               "GameExited"
 #define PLAYOS_TRUSTED_EVENT_GAME_CRASHED              "GameCrashed"
 #define PLAYOS_TRUSTED_EVENT_COMPOSITOR_STATE_CHANGED  "CompositorStateChanged"
+#define PLAYOS_TRUSTED_EVENT_THERMAL_STATE_CHANGED     "ThermalStateChanged"
+#define PLAYOS_TRUSTED_EVENT_PERF_PROFILE_CHANGED      "PerfProfileChanged"
 
 /**
  * Register this process as the persistent shell event listener.
@@ -125,6 +127,30 @@ int playos_trusted_shutdown(int fd);
  * @return    0 on success, -1 on error.
  */
 int playos_trusted_reboot(int fd);
+
+/**
+ * Request a performance profile change via IPC (Sprint 9).
+ *
+ * Sends: {"v":1,"type":"SetPerfProfile","profile":"<name>"}
+ * Profile is 0=balanced, 1=power_save, 2=performance.
+ *
+ * @param fd       Connected socket fd.
+ * @param profile  Desired profile (PlayOSPerfProfile enum value).
+ * @return         0 if accepted, -1 if denied or on error.
+ */
+int playos_trusted_set_perf_profile(int fd, int profile);
+
+/**
+ * Request system suspend (S3) via IPC (Sprint 9).
+ *
+ * Sends: {"v":1,"type":"Suspend"}
+ * playos-init delivers SUSPEND to the active game, writes "mem" to
+ * /sys/power/state, and delivers RESUME after wake.
+ *
+ * @param fd  Connected socket fd.
+ * @return    0 on success, -1 on error.
+ */
+int playos_trusted_suspend(int fd);
 
 #ifdef __cplusplus
 }
