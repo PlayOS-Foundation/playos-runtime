@@ -152,6 +152,33 @@ int playos_trusted_set_perf_profile(int fd, int profile);
  */
 int playos_trusted_suspend(int fd);
 
+/**
+ * Request a factory reset via IPC (Sprint 10).
+ *
+ * Sends:
+ *   {"v":1,"type":"FactoryReset",
+ *    "erase_games":<0|1>,
+ *    "erase_saves":<0|1>,
+ *    "erase_cache":<0|1>,
+ *    "erase_config":<0|1>,
+ *    "erase_logs":<0|1>}
+ *
+ * playos-init refuses the request if a game is running (FactoryResetError,
+ * reason "game_running"); otherwise it erases the requested trees and replies
+ * FactoryResetComplete.
+ *
+ * @param fd           Connected socket fd.
+ * @param erase_games  Erase /data/games if nonzero.
+ * @param erase_saves  Erase /data/saves if nonzero.
+ * @param erase_cache  Erase /data/cache if nonzero.
+ * @param erase_config Erase /data/config if nonzero.
+ * @param erase_logs   Erase /data/log if nonzero.
+ * @return             0 on success, -1 on error (including a running game).
+ */
+int playos_trusted_factory_reset(int fd, int erase_games, int erase_saves,
+                                 int erase_cache, int erase_config,
+                                 int erase_logs);
+
 #ifdef __cplusplus
 }
 #endif

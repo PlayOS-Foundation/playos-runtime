@@ -369,3 +369,47 @@ playos_trusted_suspend(int fd)
     playos_ipc_message_free(&msg);
     return ret;
 }
+
+int
+playos_trusted_factory_reset(int fd, int erase_games, int erase_saves,
+                             int erase_cache, int erase_config, int erase_logs)
+{
+    (void)fd;
+
+    char extra[256];
+    int n = snprintf(extra, sizeof(extra),
+                     "\"erase_games\":%d,\"erase_saves\":%d,"
+                     "\"erase_cache\":%d,\"erase_config\":%d,"
+                     "\"erase_logs\":%d",
+                     erase_games ? 1 : 0,
+                     erase_saves ? 1 : 0,
+                     erase_cache ? 1 : 0,
+                     erase_config ? 1 : 0,
+                     erase_logs ? 1 : 0);
+    if (n < 0 || (size_t)n >= sizeof(extra))
+        return -1;
+
+    struct playos_ipc_message msg;
+    memset(&msg, 0, sizeof(msg));
+    if (playos_ipc_message_from_type(PLAYOS_IPC_PROTOCOL_VERSION,
+                                     PLAYOS_IPC_TYPE_FACTORY_RESET,
+                                     extra, &msg) != 0)
+        return -1;
+
+    char buf[512] = {0};
+    int ret = send_and_recv(&msg, buf, sizeof(buf));
+    playos_ipc_message_free(&msg);
+
+    if (ret != 0)
+        return -1;
+
+    /* send_and_recv already rejects generic Error; FactoryResetError can
+     * also arrive as a non-Error type with a "reason" (game_running). */
+    if (strstr(buf, "FactoryResetError") != NULL ||
+        strstr(buf, "\"reason\":\"game_running\"") != NULL) {
+        fprintf(stderr, "[E] trusted_control: FactoryReset denied: %s\n", buf);
+        return -1;
+    }
+
+    return 0;
+}
