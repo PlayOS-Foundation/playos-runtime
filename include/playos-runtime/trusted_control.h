@@ -43,6 +43,9 @@ void playos_trusted_disconnect(int fd);
 #define PLAYOS_TRUSTED_EVENT_COMPOSITOR_STATE_CHANGED  "CompositorStateChanged"
 #define PLAYOS_TRUSTED_EVENT_THERMAL_STATE_CHANGED     "ThermalStateChanged"
 #define PLAYOS_TRUSTED_EVENT_PERF_PROFILE_CHANGED      "PerfProfileChanged"
+#define PLAYOS_TRUSTED_EVENT_UPDATE_PROGRESS           "UpdateProgress"
+#define PLAYOS_TRUSTED_EVENT_UPDATE_COMPLETE           "UpdateComplete"
+#define PLAYOS_TRUSTED_EVENT_UPDATE_ERROR              "UpdateError"
 
 /**
  * Register this process as the persistent shell event listener.
@@ -178,6 +181,19 @@ int playos_trusted_suspend(int fd);
 int playos_trusted_factory_reset(int fd, int erase_games, int erase_saves,
                                  int erase_cache, int erase_config,
                                  int erase_logs);
+
+/**
+ * Request applying a system update bundle via IPC (Sprint 11).
+ *
+ * Sends: {"v":1,"type":"ApplyUpdate","path":"<path>"}
+ * Expects response: ApplyUpdateAck {"accepted":true} on acceptance, or
+ * ApplyUpdateError on rejection/error.
+ *
+ * @param path  Filesystem path to the .playosb update bundle.
+ * @return      0 if playos-init accepted the update, -1 on error or
+ *              rejection.
+ */
+int playos_trusted_apply_update(const char *path);
 
 #ifdef __cplusplus
 }

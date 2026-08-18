@@ -84,6 +84,12 @@ send_and_recv(struct playos_ipc_message *msg, char *buf, size_t bufsz)
         playos_ipc_message_free(&resp);
         goto close_fd;
     }
+    if (resp.type && strcmp(resp.type, "ApplyUpdateError") == 0) {
+        fprintf(stderr, "[E] trusted_control: ApplyUpdateError: %s\n",
+                buf ? buf : "(no details)");
+        playos_ipc_message_free(&resp);
+        goto close_fd;
+    }
 
     playos_ipc_message_free(&resp);
     ret = 0;
@@ -408,6 +414,42 @@ playos_trusted_factory_reset(int fd, int erase_games, int erase_saves,
     if (strstr(buf, "FactoryResetError") != NULL ||
         strstr(buf, "\"reason\":\"game_running\"") != NULL) {
         fprintf(stderr, "[E] trusted_control: FactoryReset denied: %s\n", buf);
+        return -1;
+    }
+
+    return 0;
+}
+
+int
+playos_trusted_apply_update(const char *path)
+{
+    if (path == NULL)
+        return -1;
+
+    char extra[512];
+    int n = snprintf(extra, sizeof(extra), "\"path\":\"%s\"", path);
+    if (n < 0 || (size_t)n >= sizeof(extra))
+        return -1;
+
+    struct playos_ipc_message msg;
+    memset(&msg, 0, sizeof(msg));
+    if (playos_ipc_message_from_type(PLAYOS_IPC_PROTOCOL_VERSION,
+                                     "ApplyUpdate",
+                                     extra, &msg) != 0)
+        return -1;
+
+    char buf[512] = {0};
+    int ret = send_and_recv(&msg, buf, sizeof(buf));
+    playos_ipc_message_free(&msg);
+
+    if (ret != 0)
+        return -1;
+
+    /* send_and_recv rejects generic Error and ApplyUpdateError; a valid
+     * acceptance must be ApplyUpdateAck with accepted:true. */
+    if (strstr(buf, "\"type\":\"ApplyUpdateAck\"") == NULL ||
+        strstr(buf, "\"accepted\":true") == NULL) {
+        fprintf(stderr, "[E] trusted_control: ApplyUpdate not accepted: %s\n", buf);
         return -1;
     }
 
