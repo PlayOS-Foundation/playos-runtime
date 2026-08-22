@@ -49,3 +49,24 @@ install(
 install(TARGETS playos-trusted
     ARCHIVE DESTINATION lib
 )
+
+# ── Tests ─────────────────────────────────────────────────────
+
+option(BUILD_TESTS "Build host tests" ON)
+
+if(BUILD_TESTS)
+    enable_testing()
+
+    # S12-T6: trusted control-socket ownership + peer policy.
+    add_executable(test-trusted-control
+        tests/test_trusted_control.c
+        ${PLAYOS_IPC_DIR}/ipc_server.c
+        ${PLAYOS_IPC_DIR}/ipc_framing.c
+    )
+    target_include_directories(test-trusted-control PRIVATE ${PLAYOS_IPC_DIR})
+    target_compile_definitions(test-trusted-control PRIVATE _GNU_SOURCE)
+    if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(test-trusted-control PRIVATE -Wall -Wextra)
+    endif()
+    add_test(NAME trusted-control COMMAND test-trusted-control)
+endif()
