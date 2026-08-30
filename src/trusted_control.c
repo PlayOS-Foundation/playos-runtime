@@ -316,6 +316,24 @@ playos_trusted_reboot(int fd)
     return ret;
 }
 
+int
+playos_trusted_start_installer(int fd)
+{
+    (void)fd;
+
+    struct playos_ipc_message msg;
+    memset(&msg, 0, sizeof(msg));
+    if (playos_ipc_message_from_type(PLAYOS_IPC_PROTOCOL_VERSION,
+                                     PLAYOS_IPC_TYPE_START_INSTALLER,
+                                     NULL, &msg) != 0)
+        return -1;
+
+    char buf[128] = {0};
+    int ret = send_and_recv(&msg, buf, sizeof(buf));
+    playos_ipc_message_free(&msg);
+    return ret;
+}
+
 static const char *
 perf_profile_wire_name(int profile)
 {

@@ -132,6 +132,16 @@ int playos_trusted_shutdown(int fd);
 int playos_trusted_reboot(int fd);
 
 /**
+ * Request the runtime installer handoff via IPC (Sprint 13.7).
+ *
+ * Sends: {"v":1,"type":"StartInstaller"}
+ *
+ * @param fd  Connected socket fd (pass -1 to open a fresh connection).
+ * @return    0 on success, -1 on error.
+ */
+int playos_trusted_start_installer(int fd);
+
+/**
  * Request a performance profile change via IPC (Sprint 9).
  *
  * Sends: {"v":1,"type":"SetPerfProfile","profile":"<name>"}
