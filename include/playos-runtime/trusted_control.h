@@ -166,6 +166,26 @@ int playos_trusted_set_perf_profile(int fd, int profile);
 int playos_trusted_suspend(int fd);
 
 /**
+ * Show the system overlay (pause menu) over the running game (Sprint 14).
+ *
+ * Fire-and-forget: shell -> init -> compositor (ShowOverlay).
+ *
+ * @param fd  Connected socket fd (ignored; opens its own per operation).
+ * @return    0 on success, -1 on error.
+ */
+int playos_trusted_show_overlay(int fd);
+
+/**
+ * Hide the system overlay (resume the game) (Sprint 14).
+ *
+ * Fire-and-forget: shell -> init -> compositor (HideOverlay).
+ *
+ * @param fd  Connected socket fd (ignored; opens its own per operation).
+ * @return    0 on success, -1 on error.
+ */
+int playos_trusted_hide_overlay(int fd);
+
+/**
  * Request a factory reset via IPC (Sprint 10).
  *
  * Sends:

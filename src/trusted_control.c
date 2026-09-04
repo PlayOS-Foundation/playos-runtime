@@ -395,6 +395,40 @@ playos_trusted_suspend(int fd)
 }
 
 int
+playos_trusted_show_overlay(int fd)
+{
+    (void)fd;
+
+    struct playos_ipc_message msg;
+    memset(&msg, 0, sizeof(msg));
+    if (playos_ipc_message_from_type(PLAYOS_IPC_PROTOCOL_VERSION,
+                                     PLAYOS_IPC_TYPE_SHOW_OVERLAY,
+                                     NULL, &msg) != 0)
+        return -1;
+
+    int ret = send_only(&msg);
+    playos_ipc_message_free(&msg);
+    return ret;
+}
+
+int
+playos_trusted_hide_overlay(int fd)
+{
+    (void)fd;
+
+    struct playos_ipc_message msg;
+    memset(&msg, 0, sizeof(msg));
+    if (playos_ipc_message_from_type(PLAYOS_IPC_PROTOCOL_VERSION,
+                                     PLAYOS_IPC_TYPE_HIDE_OVERLAY,
+                                     NULL, &msg) != 0)
+        return -1;
+
+    int ret = send_only(&msg);
+    playos_ipc_message_free(&msg);
+    return ret;
+}
+
+int
 playos_trusted_factory_reset(int fd, int erase_games, int erase_saves,
                              int erase_cache, int erase_config, int erase_logs)
 {
