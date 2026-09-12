@@ -186,6 +186,19 @@ int playos_trusted_show_overlay(int fd);
 int playos_trusted_hide_overlay(int fd);
 
 /**
+ * Roll back to the other A/B system slot and reboot (Sprint 14 recovery menu).
+ *
+ * Fire-and-forget: shell -> init (RollbackSlot). init applies the full
+ * rollback semantics to /EFI/playos/boot.json (mark the current slot bad,
+ * the target slot pending, reset its boot count) and reboots; the shell must
+ * never rewrite boot.json itself.
+ *
+ * @param fd  Connected socket fd (ignored; opens its own per operation).
+ * @return    0 on success, -1 on error.
+ */
+int playos_trusted_rollback_slot(int fd);
+
+/**
  * Request a factory reset via IPC (Sprint 10).
  *
  * Sends:
