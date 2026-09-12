@@ -142,6 +142,20 @@ int playos_trusted_reboot(int fd);
 int playos_trusted_start_installer(int fd);
 
 /**
+ * Start the runtime installer for a specific target disk (S14-T10).
+ *
+ * The shell's installer front-end picks the disk; passing it here lets init
+ * hand it to the installer child (PLAYOS_INSTALL_TARGET) so the destructive
+ * phase begins immediately instead of asking the user again.
+ *
+ * @param fd           Connected socket fd (pass -1 to open a fresh connection).
+ * @param target_disk  Block device path such as "/dev/nvme0n1", or NULL/"" to
+ *                     let the installer show its own disk picker.
+ * @return             0 on success, -1 on error.
+ */
+int playos_trusted_start_installer_target(int fd, const char *target_disk);
+
+/**
  * Request a performance profile change via IPC (Sprint 9).
  *
  * Sends: {"v":1,"type":"SetPerfProfile","profile":"<name>"}

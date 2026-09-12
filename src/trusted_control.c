@@ -319,13 +319,28 @@ playos_trusted_reboot(int fd)
 int
 playos_trusted_start_installer(int fd)
 {
+    return playos_trusted_start_installer_target(fd, NULL);
+}
+
+/* S14-T10: the shell's installer front-end picks the target disk and passes it
+ * here, so init can start the destructive phase without the installer asking
+ * the user a second time. A NULL/empty target keeps the old behaviour: the
+ * installer shows its own disk picker. */
+int
+playos_trusted_start_installer_target(int fd, const char *target_disk)
+{
     (void)fd;
+
+    char extra[128];
+    extra[0] = '\0';
+    if (target_disk && target_disk[0])
+        snprintf(extra, sizeof(extra), "\"target_disk\":\"%s\"", target_disk);
 
     struct playos_ipc_message msg;
     memset(&msg, 0, sizeof(msg));
     if (playos_ipc_message_from_type(PLAYOS_IPC_PROTOCOL_VERSION,
                                      PLAYOS_IPC_TYPE_START_INSTALLER,
-                                     NULL, &msg) != 0)
+                                     extra[0] ? extra : NULL, &msg) != 0)
         return -1;
 
     char buf[128] = {0};
