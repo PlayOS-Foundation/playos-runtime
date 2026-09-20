@@ -562,3 +562,49 @@ playos_trusted_prepare_install(int fd, const char *target_disk)
 
     return send_only(&msg);
 }
+
+/* S14.5-T3: the screen-less install worker reports its progress and outcome to
+ * init, which relays them to the registered shell listener. `fields` becomes the
+ * message's payload; init re-adds v/type when it forwards. */
+static int
+install_event(const char *type, const char *fields)
+{
+    struct playos_ipc_message msg;
+    memset(&msg, 0, sizeof(msg));
+    if (playos_ipc_message_from_type(PLAYOS_IPC_PROTOCOL_VERSION, type,
+                                     (fields && fields[0]) ? fields : NULL,
+                                     &msg) != 0)
+        return -1;
+    return send_only(&msg);
+}
+
+int
+playos_trusted_install_progress(int fd, int step, int percent, const char *step_name)
+{
+    (void)fd;
+
+    char fields[256];
+    snprintf(fields, sizeof(fields),
+             "\"step\":%d,\"percent\":%d,\"step_name\":\"%s\"",
+             step, percent, step_name ? step_name : "");
+    return install_event(PLAYOS_IPC_TYPE_INSTALL_PROGRESS, fields);
+}
+
+int
+playos_trusted_install_complete(int fd)
+{
+    (void)fd;
+    return install_event(PLAYOS_IPC_TYPE_INSTALL_COMPLETE,
+                         "\"reboot_required\":true");
+}
+
+int
+playos_trusted_install_error(int fd, int step, const char *reason)
+{
+    (void)fd;
+
+    char fields[512];
+    snprintf(fields, sizeof(fields), "\"step\":%d,\"reason\":\"%s\"",
+             step, reason ? reason : "unknown");
+    return install_event(PLAYOS_IPC_TYPE_INSTALL_ERROR, fields);
+}

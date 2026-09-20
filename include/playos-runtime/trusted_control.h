@@ -159,6 +159,13 @@ int playos_trusted_start_installer_target(int fd, const char *target_disk);
  * commits to a progress screen. Returns 0 when the request was sent. */
 int playos_trusted_prepare_install(int fd, const char *target_disk);
 
+/* S14.5-T3: report install progress and outcome from the screen-less worker.
+ * init relays these to the shell listener as InstallProgress / InstallComplete /
+ * InstallError. */
+int playos_trusted_install_progress(int fd, int step, int percent, const char *step_name);
+int playos_trusted_install_complete(int fd);
+int playos_trusted_install_error(int fd, int step, const char *reason);
+
 /**
  * Request a performance profile change via IPC (Sprint 9).
  *
