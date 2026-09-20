@@ -155,6 +155,10 @@ int playos_trusted_start_installer(int fd);
  */
 int playos_trusted_start_installer_target(int fd, const char *target_disk);
 
+/* S14.5-T2: validate an install target and release its mounts before the shell
+ * commits to a progress screen. Returns 0 when the request was sent. */
+int playos_trusted_prepare_install(int fd, const char *target_disk);
+
 /**
  * Request a performance profile change via IPC (Sprint 9).
  *

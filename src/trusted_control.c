@@ -539,3 +539,26 @@ playos_trusted_apply_update(const char *path)
 
     return 0;
 }
+
+/* S14.5-T2: ask init to validate the target and release its mounts before the
+ * shell commits to a progress screen. The reply is the same simple ack shape the
+ * other control calls use; on failure init answers PrepareInstallError. */
+int
+playos_trusted_prepare_install(int fd, const char *target_disk)
+{
+    (void)fd;
+
+    char extra[128];
+    extra[0] = '\0';
+    if (target_disk && target_disk[0])
+        snprintf(extra, sizeof(extra), "\"target_disk\":\"%s\"", target_disk);
+
+    struct playos_ipc_message msg;
+    memset(&msg, 0, sizeof(msg));
+    if (playos_ipc_message_from_type(PLAYOS_IPC_PROTOCOL_VERSION,
+                                     PLAYOS_IPC_TYPE_PREPARE_INSTALL,
+                                     extra[0] ? extra : NULL, &msg) != 0)
+        return -1;
+
+    return send_only(&msg);
+}
