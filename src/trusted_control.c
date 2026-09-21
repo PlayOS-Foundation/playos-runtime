@@ -319,7 +319,7 @@ playos_trusted_reboot(int fd)
 int
 playos_trusted_start_installer(int fd)
 {
-    return playos_trusted_start_installer_target(fd, NULL);
+    return playos_trusted_start_installer_target(fd, NULL, NULL);
 }
 
 /* S14-T10: the shell's installer front-end picks the target disk and passes it
@@ -327,14 +327,20 @@ playos_trusted_start_installer(int fd)
  * the user a second time. A NULL/empty target keeps the old behaviour: the
  * installer shows its own disk picker. */
 int
-playos_trusted_start_installer_target(int fd, const char *target_disk)
+playos_trusted_start_installer_target(int fd, const char *target_disk,
+                                      const char *payload_device)
 {
     (void)fd;
 
-    char extra[128];
+    char extra[256];
     extra[0] = '\0';
     if (target_disk && target_disk[0])
         snprintf(extra, sizeof(extra), "\"target_disk\":\"%s\"", target_disk);
+    if (payload_device && payload_device[0]) {
+        size_t used = strlen(extra);
+        snprintf(extra + used, sizeof(extra) - used,
+                 "%s\"payload_device\":\"%s\"", used ? "," : "", payload_device);
+    }
 
     struct playos_ipc_message msg;
     memset(&msg, 0, sizeof(msg));
@@ -343,10 +349,10 @@ playos_trusted_start_installer_target(int fd, const char *target_disk)
                                      extra[0] ? extra : NULL, &msg) != 0)
         return -1;
 
-    char buf[128] = {0};
-    int ret = send_and_recv(&msg, buf, sizeof(buf));
-    playos_ipc_message_free(&msg);
-    return ret;
+    /* Synchronous since S14.5-T4: the shell must not switch to a progress screen
+     * unless the worker is actually running. */
+    char body[256] = {0};
+    return send_and_recv(&msg, body, sizeof(body));
 }
 
 static const char *
