@@ -544,7 +544,8 @@ playos_trusted_apply_update(const char *path)
  * shell commits to a progress screen. The reply is the same simple ack shape the
  * other control calls use; on failure init answers PrepareInstallError. */
 int
-playos_trusted_prepare_install(int fd, const char *target_disk)
+playos_trusted_prepare_install(int fd, const char *target_disk,
+                               char *err, size_t errlen)
 {
     (void)fd;
 
@@ -560,7 +561,24 @@ playos_trusted_prepare_install(int fd, const char *target_disk)
                                      extra[0] ? extra : NULL, &msg) != 0)
         return -1;
 
-    return send_only(&msg);
+    /* Synchronous on purpose: the shell must know whether the target is
+     * installable *before* it commits to a progress screen. */
+    char body[256] = {0};
+    int rc = send_and_recv(&msg, body, sizeof(body));
+    if (rc != 0) {
+        if (err && errlen)
+            snprintf(err, errlen, "%s", body[0] ? body : "prepare failed");
+        return -1;
+    }
+
+    /* send_and_recv() treats the generic Error type as failure; our reply is a
+     * specific type, so check it here. */
+    if (strstr(body, PLAYOS_IPC_TYPE_PREPARE_INSTALL_ERROR) != NULL) {
+        if (err && errlen)
+            snprintf(err, errlen, "target rejected");
+        return -1;
+    }
+    return 0;
 }
 
 /* S14.5-T3: the screen-less install worker reports its progress and outcome to
@@ -607,4 +625,37 @@ playos_trusted_install_error(int fd, int step, const char *reason)
     snprintf(fields, sizeof(fields), "\"step\":%d,\"reason\":\"%s\"",
              step, reason ? reason : "unknown");
     return install_event(PLAYOS_IPC_TYPE_INSTALL_ERROR, fields);
+}
+
+/* S14.5-T4: like playos_trusted_shell_poll() but also hands back the event's
+ * payload, so the shell can read an install step's number, name and percent
+ * instead of only learning that something happened. */
+int
+playos_trusted_shell_poll_json(int fd, char *type_buf, size_t type_bufsz,
+                               char *json_buf, size_t json_bufsz)
+{
+    if (fd < 0)
+        return 0;
+
+    int flags = fcntl(fd, F_GETFL, 0);
+    if (flags >= 0)
+        (void)fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+
+    struct playos_ipc_message msg;
+    memset(&msg, 0, sizeof(msg));
+
+    int n = playos_ipc_client_recv(fd, &msg, FRAME_BUF_SIZE);
+    if (n == 0)
+        return -1;
+    if (n < 0) {
+        if (errno == EAGAIN || errno == EWOULDBLOCK)
+            return 0;
+        return -1;
+    }
+
+    if (type_buf && type_bufsz > 0 && msg.type)
+        snprintf(type_buf, type_bufsz, "%s", msg.type);
+    if (json_buf && json_bufsz > 0 && msg.json_raw)
+        snprintf(json_buf, json_bufsz, "%s", msg.json_raw);
+    return 1;
 }

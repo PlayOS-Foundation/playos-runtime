@@ -45,6 +45,10 @@ void playos_trusted_disconnect(int fd);
 #define PLAYOS_TRUSTED_EVENT_PERF_PROFILE_CHANGED      "PerfProfileChanged"
 #define PLAYOS_TRUSTED_EVENT_UPDATE_PROGRESS           "UpdateProgress"
 #define PLAYOS_TRUSTED_EVENT_UPDATE_COMPLETE           "UpdateComplete"
+/* S14.5-T4: install events relayed by init from the screen-less worker. */
+#define PLAYOS_TRUSTED_EVENT_INSTALL_PROGRESS          "InstallProgress"
+#define PLAYOS_TRUSTED_EVENT_INSTALL_COMPLETE          "InstallComplete"
+#define PLAYOS_TRUSTED_EVENT_INSTALL_ERROR             "InstallError"
 #define PLAYOS_TRUSTED_EVENT_UPDATE_ERROR              "UpdateError"
 
 /**
@@ -72,6 +76,11 @@ int playos_trusted_register_shell(void);
  *                    -1 on error or if the server closed the connection.
  */
 int playos_trusted_shell_poll(int fd, char *type_buf, size_t type_bufsz);
+
+/* S14.5-T4: as above, but also returns the event payload (json_buf), which is
+ * what carries an install step's number, name and percent. */
+int playos_trusted_shell_poll_json(int fd, char *type_buf, size_t type_bufsz,
+                                   char *json_buf, size_t json_bufsz);
 
 /* ── Operations ─────────────────────────────────────────────────── */
 
@@ -157,7 +166,8 @@ int playos_trusted_start_installer_target(int fd, const char *target_disk);
 
 /* S14.5-T2: validate an install target and release its mounts before the shell
  * commits to a progress screen. Returns 0 when the request was sent. */
-int playos_trusted_prepare_install(int fd, const char *target_disk);
+int playos_trusted_prepare_install(int fd, const char *target_disk,
+                                   char *err, size_t errlen);
 
 /* S14.5-T3: report install progress and outcome from the screen-less worker.
  * init relays these to the shell listener as InstallProgress / InstallComplete /
