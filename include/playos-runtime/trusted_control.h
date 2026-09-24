@@ -126,7 +126,10 @@ int playos_trusted_query_status(int fd, char *status_buf, size_t bufsz);
  * shell never talks to wpa_supplicant (or the bridge) directly.
  *
  * Each writes the reply body (JSON, as documented in runtime-ipc.md) into
- * json_buf and returns its length, or -1 on failure.
+ * json_buf and returns **0 on success, -1 on error** — the same convention as
+ * playos_trusted_query_status(). The body is NUL-terminated; the return value
+ * is NOT a length. A reply the daemon flagged as an error (e.g. an "Error"
+ * type) also comes back as -1.
  */
 
 /** {"v":1,"type":"ScanNetworks"} → ScanResults{networks[]} */
