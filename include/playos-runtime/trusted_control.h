@@ -120,6 +120,30 @@ int playos_trusted_terminate_game(int fd);
  */
 int playos_trusted_query_status(int fd, char *status_buf, size_t bufsz);
 
+/* ── Networking (Sprint 16, T6) ──────────────────────────────────────────
+ * Wi-Fi requests ride the same socket: init relays each one to the trusted
+ * playos-net bridge and returns the bridge's JSON reply unchanged, so the
+ * shell never talks to wpa_supplicant (or the bridge) directly.
+ *
+ * Each writes the reply body (JSON, as documented in runtime-ipc.md) into
+ * json_buf and returns its length, or -1 on failure.
+ */
+
+/** {"v":1,"type":"ScanNetworks"} → ScanResults{networks[]} */
+int playos_trusted_scan_networks(int fd, char *json_buf, size_t bufsz);
+
+/** {"v":1,"type":"ConnectNetwork","ssid":…,"psk":…,"security":…}
+ *  → ConnectNetworkAck | ConnectNetworkError{reason} */
+int playos_trusted_connect_network(int fd, const char *ssid, const char *psk,
+                                   const char *security,
+                                   char *json_buf, size_t bufsz);
+
+/** {"v":1,"type":"DisconnectNetwork"} → DisconnectNetworkAck */
+int playos_trusted_disconnect_network(int fd, char *json_buf, size_t bufsz);
+
+/** {"v":1,"type":"NetworkStatus"} → NetworkStatusReport{state,ssid,ip,…} */
+int playos_trusted_network_status(int fd, char *json_buf, size_t bufsz);
+
 /**
  * Request system shutdown via IPC.
  *

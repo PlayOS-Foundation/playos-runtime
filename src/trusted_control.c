@@ -280,6 +280,88 @@ playos_trusted_query_status(int fd, char *status_buf, size_t bufsz)
     return ret;
 }
 
+/* ── Networking (Sprint 16, T6) ──────────────────────────────────────────
+ * Same shape as every other request. init relays these to the trusted
+ * playos-net bridge and hands the bridge's reply back unchanged, so the shell
+ * never opens the bridge socket — and could not, being outside its trust. */
+
+int
+playos_trusted_scan_networks(int fd, char *json_buf, size_t bufsz)
+{
+    (void)fd;
+
+    struct playos_ipc_message msg;
+    memset(&msg, 0, sizeof(msg));
+    if (playos_ipc_message_from_type(PLAYOS_IPC_PROTOCOL_VERSION,
+                                     PLAYOS_IPC_TYPE_SCAN_NETWORKS,
+                                     NULL, &msg) != 0)
+        return -1;
+
+    int ret = send_and_recv(&msg, json_buf, bufsz);
+    playos_ipc_message_free(&msg);
+    return ret;
+}
+
+int
+playos_trusted_connect_network(int fd, const char *ssid, const char *psk,
+                               const char *security,
+                               char *json_buf, size_t bufsz)
+{
+    (void)fd;
+    if (!ssid || !ssid[0])
+        return -1;
+
+    char extra[512];
+    snprintf(extra, sizeof(extra),
+             "\"ssid\":\"%s\",\"psk\":\"%s\",\"security\":\"%s\"",
+             ssid, psk ? psk : "", security ? security : "wpa2");
+
+    struct playos_ipc_message msg;
+    memset(&msg, 0, sizeof(msg));
+    if (playos_ipc_message_from_type(PLAYOS_IPC_PROTOCOL_VERSION,
+                                     PLAYOS_IPC_TYPE_CONNECT_NETWORK,
+                                     extra, &msg) != 0)
+        return -1;
+
+    int ret = send_and_recv(&msg, json_buf, bufsz);
+    playos_ipc_message_free(&msg);
+    return ret;
+}
+
+int
+playos_trusted_disconnect_network(int fd, char *json_buf, size_t bufsz)
+{
+    (void)fd;
+
+    struct playos_ipc_message msg;
+    memset(&msg, 0, sizeof(msg));
+    if (playos_ipc_message_from_type(PLAYOS_IPC_PROTOCOL_VERSION,
+                                     PLAYOS_IPC_TYPE_DISCONNECT_NETWORK,
+                                     NULL, &msg) != 0)
+        return -1;
+
+    int ret = send_and_recv(&msg, json_buf, bufsz);
+    playos_ipc_message_free(&msg);
+    return ret;
+}
+
+int
+playos_trusted_network_status(int fd, char *json_buf, size_t bufsz)
+{
+    (void)fd;
+
+    struct playos_ipc_message msg;
+    memset(&msg, 0, sizeof(msg));
+    if (playos_ipc_message_from_type(PLAYOS_IPC_PROTOCOL_VERSION,
+                                     PLAYOS_IPC_TYPE_NETWORK_STATUS,
+                                     NULL, &msg) != 0)
+        return -1;
+
+    int ret = send_and_recv(&msg, json_buf, bufsz);
+    playos_ipc_message_free(&msg);
+    return ret;
+}
+
 int
 playos_trusted_shutdown(int fd)
 {
